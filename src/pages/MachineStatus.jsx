@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Wrench, LogIn } from 'lucide-react';
+import { CheckCircle2, Wrench, LogIn, Printer } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, fmtDateTime } from '../lib/status';
 import InspectionForm from '../components/InspectionForm';
-import { InspectionReport } from '../components/PrintReports';
+import { InspectionReport, BlankChecklistSheet } from '../components/PrintReports';
 
 export default function MachineStatus() {
   const { machineId } = useParams();
@@ -60,7 +60,7 @@ export default function MachineStatus() {
     if (error) { alert('Błąd zapisu: ' + error.message); return; }
     setInspecting(false);
     await load();
-    setPrintJob({ machine: { ...machine, last_inspection_date: rec.date }, inspection: rec });
+    setPrintJob({ type: 'inspection', machine: { ...machine, last_inspection_date: rec.date }, inspection: rec });
   };
 
   if (loading) return <div className="center-screen text-muted">Wczytywanie…</div>;
@@ -79,7 +79,8 @@ export default function MachineStatus() {
 
   return (
     <div className="page">
-      {printJob && <InspectionReport machine={printJob.machine} inspection={printJob.inspection} />}
+      {printJob?.type === 'inspection' && <InspectionReport machine={printJob.machine} inspection={printJob.inspection} />}
+      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={machine} />}
 
       <div className="topbar">
         <div className="brand"><Wrench size={20} /> CMMS Przeglądy</div>
@@ -111,6 +112,9 @@ export default function MachineStatus() {
           </p>
           <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={startInspection}>
             <CheckCircle2 size={16} /> Zarejestruj przegląd
+          </button>
+          <button className="btn btn-subtle" style={{ marginTop: 10, marginLeft: 8 }} onClick={() => setPrintJob({ type: 'checklist' })}>
+            <Printer size={16} /> Drukuj kartę kontrolną
           </button>
         </div>
 

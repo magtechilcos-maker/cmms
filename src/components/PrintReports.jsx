@@ -25,6 +25,7 @@ const Sign = ({ label }) => (
 );
 
 export function InspectionReport({ machine, inspection }) {
+  const checklist = machine.checklist_items || [];
   return (
     <PrintSheet>
       <div style={{ borderBottom: '2px solid #111', paddingBottom: 12, marginBottom: 20 }}>
@@ -33,7 +34,7 @@ export function InspectionReport({ machine, inspection }) {
           {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
         </h1>
       </div>
-      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 24 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
         <tbody>
           <Row label="Kod urządzenia" value={machine.id} />
           <Row label="Nr porządkowy" value={machine.sequence_number || '—'} />
@@ -42,18 +43,83 @@ export function InspectionReport({ machine, inspection }) {
           <Row label="Częstotliwość przeglądów" value={INTERVAL_LABELS[machine.interval_type] + (machine.interval_type === 'custom' ? ` (${machine.custom_days} dni)` : '')} />
           <Row label="Data przeglądu" value={fmtDateTime(inspection.date)} />
           <Row label="Wykonał" value={inspection.technician_name} />
-          <Row label="Wynik" value={inspection.result === 'ok' ? 'Maszyna sprawna' : 'Stwierdzono usterkę'} />
+          <Row label="Wynik ogólny" value={inspection.result === 'ok' ? 'Maszyna sprawna' : 'Stwierdzono usterkę'} />
         </tbody>
       </table>
+
+      <ChecklistTable items={checklist} />
+
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>UWAGI</div>
-        <div style={{ minHeight: 60, border: '1px solid #ccc', borderRadius: 6, padding: 10, fontSize: 13 }}>{inspection.notes || '—'}</div>
+        <div style={{ minHeight: 70, border: '1px solid #ccc', borderRadius: 6, padding: 10, fontSize: 13 }}>{inspection.notes || '—'}</div>
       </div>
       <div style={{ display: 'flex', gap: 40, marginTop: 60 }}>
         <Sign label="Podpis wykonującego" />
         <Sign label="Podpis odbierającego" />
       </div>
       <div style={{ marginTop: 30, fontSize: 10, color: '#888' }}>Wygenerowano automatycznie · {fmtDateTime(new Date().toISOString())}</div>
+    </PrintSheet>
+  );
+}
+
+// Lista kontrolna z pustymi kratkami do ręcznego zaznaczenia (✓ lub ✗) długopisem
+function ChecklistTable({ items }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>LISTA KONTROLNA</div>
+      <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>Zaznacz ręcznie ✓ lub ✗ przy każdym punkcie.</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <tbody>
+          {items.map((item, i) => (
+            <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
+              <td style={{ padding: '7px 4px', width: 30 }}>
+                <span style={{ display: 'inline-block', width: 20, height: 20, border: '1.5px solid #333', borderRadius: 3 }} />
+              </td>
+              <td style={{ padding: '7px 4px' }}>{item}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// Pusta karta kontrolna do wydrukowania PRZED przeglądem — do zabrania na obchód
+export function BlankChecklistSheet({ machine }) {
+  const checklist = machine.checklist_items || [];
+  return (
+    <PrintSheet>
+      <div style={{ borderBottom: '2px solid #111', paddingBottom: 12, marginBottom: 20 }}>
+        <div style={{ fontSize: 11, letterSpacing: 1, color: '#555' }}>KARTA KONTROLNA PRZEGLĄDU</div>
+        <h1 style={{ fontSize: 24, margin: '4px 0 0', fontFamily: 'Space Grotesk, sans-serif' }}>
+          {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
+        </h1>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
+        <tbody>
+          <Row label="Kod urządzenia" value={machine.id} />
+          <Row label="Nr seryjny" value={machine.serial_number || '—'} />
+          <Row label="Lokalizacja" value={machine.location || '—'} />
+          <Row label="Data przeglądu" value="…………………………" />
+          <Row label="Wykonał" value="…………………………" />
+        </tbody>
+      </table>
+      {checklist.length > 0 ? (
+        <ChecklistTable items={checklist} />
+      ) : (
+        <p style={{ fontSize: 12, color: '#888', marginBottom: 20 }}>
+          Ta maszyna nie ma jeszcze zdefiniowanej listy kontrolnej — dodaj punkty w panelu administratora.
+        </p>
+      )}
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>UWAGI</div>
+        <div style={{ minHeight: 90, border: '1px solid #ccc', borderRadius: 6, padding: 10 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 40, marginTop: 40 }}>
+        <Sign label="Podpis wykonującego" />
+        <Sign label="Podpis odbierającego" />
+      </div>
     </PrintSheet>
   );
 }

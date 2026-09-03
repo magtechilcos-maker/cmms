@@ -44,15 +44,18 @@ export default function InspectionForm({ machine, mechanic, onSave, onClose, sav
         </div>
       </label>
       <label className="field">
-        <span className="field-label">Uwagi / opis czynności</span>
+        <span className="field-label">Uwagi</span>
         <textarea
           className="input"
           style={{ minHeight: 90, resize: 'vertical' }}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
-          placeholder="Opcjonalny opis, np. wymieniono filtr, sprawdzono poziom oleju..."
+          placeholder="np. zaplanowano do wymiany, oczekiwanie na części, wymieniono filtr..."
         />
       </label>
+      <p className="text-sm text-muted" style={{ marginTop: -8 }}>
+        Szczegółową listę kontrolną z kratkami do zaznaczenia znajdziesz na wydrukowanym raporcie po zapisaniu.
+      </p>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
         <button className="btn btn-ghost" onClick={onClose}>Anuluj</button>
         <button className="btn btn-primary" onClick={submit} disabled={saving}>

@@ -5,7 +5,7 @@ import { supabase, SITE_URL } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import Modal from '../components/Modal';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, uid, qrUrl } from '../lib/status';
-import { PeriodReport, QrSheet } from '../components/PrintReports';
+import { PeriodReport, QrSheet, BlankChecklistSheet } from '../components/PrintReports';
 
 export default function Admin() {
   const { mechanic, logout } = useAuth();
@@ -48,8 +48,6 @@ export default function Admin() {
     if (mechanic?.is_admin) load();
   }, [mechanic, load]);
 
-  if (!mechanic || !mechanic.is_admin) return null;
-
   useEffect(() => {
     if (printJob) {
       const t = setTimeout(() => window.print(), 150);
@@ -58,6 +56,8 @@ export default function Admin() {
       return () => { clearTimeout(t); window.removeEventListener('afterprint', after); };
     }
   }, [printJob]);
+
+  if (!mechanic || !mechanic.is_admin) return null;
 
   const saveMachine = async (m) => {
     const isNew = !machines.some((x) => x.id === m.id);
@@ -92,6 +92,7 @@ export default function Admin() {
     <div className="page">
       {printJob?.type === 'period' && <PeriodReport machines={machines} inspections={inspections} from={printJob.from} to={printJob.to} />}
       {printJob?.type === 'qrsheet' && <QrSheet machines={printJob.machines} siteUrl={SITE_URL} />}
+      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={printJob.machine} />}
 
       <div className="topbar">
         <div className="brand"><Wrench size={20} /> Panel administratora</div>
@@ -116,6 +117,7 @@ export default function Admin() {
                 onAdd={() => setMachineForm({})}
                 onEdit={setMachineForm}
                 onDelete={(m) => setConfirmDelete({ type: 'machine', item: m })}
+                onPrintChecklist={(m) => setPrintJob({ type: 'checklist', machine: m })}
               />
             )}
             {tab === 'mechanics' && (
@@ -183,7 +185,7 @@ function TabBtn({ active, onClick, icon: Icon, label }) {
 
 /* ---------------- Machines tab ---------------- */
 
-function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete }) {
+function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete, onPrintChecklist }) {
   const mechanicById = Object.fromEntries(mechanics.map((m) => [m.id, m.name]));
   return (
     <div>
@@ -205,6 +207,7 @@ function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete }) {
               </div>
             </div>
             <span className={`badge ${meta.className}`}>{meta.label}</span>
+            <button className="btn btn-subtle" title="Drukuj kartę kontrolną" onClick={() => onPrintChecklist(m)}><Printer size={16} /></button>
             <button className="btn btn-subtle" onClick={() => onEdit(m)}><Pencil size={16} /></button>
             <button className="btn btn-danger" onClick={() => onDelete(m)}><Trash2 size={16} /></button>
           </div>
@@ -222,6 +225,13 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
   const [intervalType, setIntervalType] = useState(initial?.interval_type || 'monthly');
   const [customDays, setCustomDays] = useState(initial?.custom_days || 14);
   const [assignedMechanicId, setAssignedMechanicId] = useState(initial?.assigned_mechanic_id || '');
+  const [checklist, setChecklist] = useState(initial?.checklist_items?.length ? initial.checklist_items : ['']);
+
+  const updateChecklistItem = (i, value) => {
+    setChecklist((list) => list.map((v, idx) => (idx === i ? value : v)));
+  };
+  const addChecklistItem = () => setChecklist((list) => [...list, '']);
+  const removeChecklistItem = (i) => setChecklist((list) => list.filter((_, idx) => idx !== i));
 
   const submit = () => {
     if (!name.trim()) return;
@@ -231,6 +241,7 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
       location: location.trim(),
       serial_number: serialNumber.trim(),
       sequence_number: sequenceNumber.trim(),
+      checklist_items: checklist.map((c) => c.trim()).filter(Boolean),
       interval_type: intervalType,
       custom_days: intervalType === 'custom' ? Number(customDays) : null,
       assigned_mechanic_id: assignedMechanicId || null,
@@ -239,7 +250,7 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
   };
 
   return (
-    <Modal title={initial ? 'Edytuj maszynę / linię' : 'Nowa maszyna / linia'} onClose={onClose}>
+    <Modal title={initial ? 'Edytuj maszynę / linię' : 'Nowa maszyna / linia'} onClose={onClose} wide>
       <label className="field">
         <span className="field-label">Nazwa</span>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="np. Prasa hydrauliczna P-3" autoFocus />
@@ -281,6 +292,32 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
           {mechanics.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
       </label>
+
+      <div className="field">
+        <span className="field-label">Lista kontrolna przeglądu</span>
+        <p className="text-sm text-muted" style={{ marginTop: -4, marginBottom: 8 }}>
+          Punkty, które mechanik zaznacza ręcznie (✓/✗) na wydrukowanej karcie kontrolnej podczas przeglądu.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {checklist.map((item, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8 }}>
+              <input
+                className="input"
+                value={item}
+                onChange={(e) => updateChecklistItem(i, e.target.value)}
+                placeholder={`np. Poziom oleju`}
+              />
+              <button type="button" className="btn btn-danger" onClick={() => removeChecklistItem(i)} disabled={checklist.length === 1}>
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button type="button" className="btn btn-subtle" style={{ marginTop: 8 }} onClick={addChecklistItem}>
+          <Plus size={15} /> Dodaj punkt kontrolny
+        </button>
+      </div>
+
       {initial && <p className="text-sm text-muted" style={{ marginBottom: 14 }}>Kod urządzenia: <strong style={{ fontFamily: 'monospace' }}>{initial.id}</strong></p>}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-ghost" onClick={onClose}>Anuluj</button>

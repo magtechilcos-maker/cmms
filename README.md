@@ -79,10 +79,21 @@ Jeśli wolisz, żeby po instalacji aplikacja od razu otwierała listę zadań me
 1. W SQL Editor Supabase odszukaj na końcu `schema.sql` blok **PIERWSZY ADMINISTRATOR** — podmień w nim `'Jan Kowalski'` i `'1234'` na swoje dane (jeśli już uruchomiłeś schemat wcześniej bez tego bloku, po prostu wklej i uruchom sam ten fragment osobno).
 2. Wejdź na `https://twoja-aplikacja.vercel.app/login` i zaloguj się danymi, które przed chwilą ustawiłeś — trafisz na listę zadań, a w prawym górnym rogu masz swoje imię. Wejście na `/admin` powinno teraz Cię wpuścić, bo ten pierwszy mechanik ma zaznaczone uprawnienia administratora.
 3. Zakładka **Mechanicy** → dodaj resztę mechaników (imię, PIN, i opcjonalnie zaznacz "Uprawnienia administratora" dla kolejnych osób, które mają mieć dostęp do panelu).
-4. Zakładka **Maszyny** → dodaj maszyny/linie, ustaw częstotliwość przeglądu i przypisz mechanika.
+4. Zakładka **Maszyny** → dodaj maszyny/linie, ustaw częstotliwość przeglądu, przypisz mechanika i uzupełnij **listę kontrolną** (punkty do sprawdzenia, różne dla drukarki i zgrzewarki, np. "Poziom oleju", "Osłony bezpieczeństwa"). Możesz też podać nr porządkowy (D1, Z1...) i nr seryjny.
 5. Zakładka **Raporty i etykiety** → wydrukuj arkusz kodów QR i naklej je na maszynach.
 6. Mechanicy logują się pod adresem głównym (`https://twoja-aplikacja.vercel.app`) swoim imieniem i PIN-em i widzą listę zadań na dziś. Osoby bez uprawnień administratora, które spróbują wejść na `/admin`, zostaną przekierowane z powrotem do swojej listy zadań.
 7. Skanując kod QR na maszynie dowolnym telefonem, każdy (nawet niezalogowany) zobaczy status przeglądu; żeby zarejestrować przegląd, trzeba się zalogować.
+
+## Lista kontrolna i wydruki
+
+Każda maszyna może mieć własną **listę kontrolną** (edytowaną w panelu admina, przy dodawaniu/edycji maszyny) — to punkty, które mechanik fizycznie sprawdza podczas przeglądu, np. dla drukarki: "Stan głowicy", "Czystość podajnika", a dla zgrzewarki: "Docisk elektrod", "Stan kabli".
+
+Lista ta pojawia się na **dwóch rodzajach wydruku**, zawsze z pustymi kratkami do ręcznego zaznaczenia (✓ lub ✗) długopisem — nie trzeba nic zaznaczać cyfrowo w telefonie:
+
+- **Raport z przeglądu** — drukuje się automatycznie zaraz po zapisaniu przeglądu w aplikacji (wynik ogólny + uwagi wpisane cyfrowo, a lista kontrolna czeka na ręczne zaznaczenie).
+- **Karta kontrolna** — całkowicie pusty formularz (bez zapisanego przeglądu), do wydrukowania z wyprzedzeniem i zabrania na obchód. Dostępna pod przyciskiem drukarki przy maszynie w panelu admina oraz na stronie statusu maszyny (`/m/:id`).
+
+Obie wersje mają też ramkę **Uwagi** na komentarze w stylu "zaplanowano do wymiany" czy "oczekiwanie na części".
 
 ## Uwagi dot. bezpieczeństwa
 
