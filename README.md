@@ -61,7 +61,20 @@ cp .env.example .env
 npm run dev
 ```
 
-## 4. Pierwsze kroki w aplikacji
+## 4. Instalacja jako aplikacja na Windows (ikonka i osobne okno)
+
+Aplikacja jest przygotowana jako PWA (Progressive Web App), więc po wdrożeniu na Vercel możesz "zainstalować" panel administratora jako zwykłą aplikację na Windows — z ikoną, własnym oknem (bez paska adresu przeglądarki) i skrótem w menu Start:
+
+1. Otwórz `https://twoja-aplikacja.vercel.app/admin` w **Chrome** albo **Edge** (to jedyne przeglądarki na Windows, które to obsługują).
+2. Po prawej stronie paska adresu pojawi się ikona instalacji (komputer ze strzałką) — kliknij ją, a potem **Zainstaluj**.
+   - Jeśli ikony nie widać: menu (⋮) → **Zainstaluj CMMS Przeglądy...** (Chrome) albo **Aplikacje → Zainstaluj tę stronę jako aplikację** (Edge).
+3. Aplikacja pojawi się jako osobny program — z ikoną na pulpicie i w menu Start, we własnym oknie.
+
+Uwaga: to dalej ta sama strona internetowa "w przebraniu" — do działania nadal potrzebuje internetu i łączy się z tą samą bazą Supabase. Telefony mechaników skanujące kody QR działają zupełnie niezależnie od tego, czy ktoś zainstalował aplikację na komputerze, czy nie.
+
+Jeśli wolisz, żeby po instalacji aplikacja od razu otwierała listę zadań mechanika zamiast panelu admina, zainstaluj ją analogicznie z adresu `https://twoja-aplikacja.vercel.app/dashboard` zamiast `/admin` — możesz mieć obie zainstalowane naraz, jako dwie osobne ikony.
+
+## 5. Pierwsze kroki w aplikacji
 
 1. Wejdź na `https://twoja-aplikacja.vercel.app/admin`.
 2. Zakładka **Mechanicy** → dodaj mechaników (imię i nazwisko + PIN, który będą podawać przy logowaniu).
