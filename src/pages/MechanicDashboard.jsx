@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, CheckCircle2, ListChecks } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
@@ -10,6 +10,7 @@ import { InspectionReport } from '../components/PrintReports';
 export default function MechanicDashboard() {
   const { mechanic, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inspecting, setInspecting] = useState(null);
@@ -76,6 +77,12 @@ export default function MechanicDashboard() {
         <h1 style={{ fontSize: 22, marginBottom: 4 }}>Cześć, {mechanic.name.split(' ')[0]}</h1>
         <p className="text-muted" style={{ marginTop: 0, marginBottom: 20 }}>{new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
 
+        {location.state?.deniedAdmin && (
+          <div className="card" style={{ marginBottom: 20, background: 'var(--over-soft)', color: 'var(--over)', border: 'none' }}>
+            Nie masz uprawnień administratora — poproś kierownika o dostęp, jeśli potrzebujesz panelu /admin.
+          </div>
+        )}
+
         {loading && <p className="text-muted">Wczytywanie…</p>}
 
         {!loading && (
@@ -128,7 +135,7 @@ function MachineTaskRow({ machine, onInspect, muted }) {
   return (
     <div className="row" style={muted ? { opacity: 0.75 } : undefined}>
       <div className="row-main" style={{ cursor: 'default' }}>
-        <div className="row-title">{machine.name}</div>
+        <div className="row-title">{machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}</div>
         <div className="row-sub">
           {machine.location || 'Brak lokalizacji'} · {INTERVAL_LABELS[machine.interval_type]} · termin: {fmtDate(dueDate)}
         </div>

@@ -29,11 +29,15 @@ export function InspectionReport({ machine, inspection }) {
     <PrintSheet>
       <div style={{ borderBottom: '2px solid #111', paddingBottom: 12, marginBottom: 20 }}>
         <div style={{ fontSize: 11, letterSpacing: 1, color: '#555' }}>RAPORT Z PRZEGLĄDU TECHNICZNEGO</div>
-        <h1 style={{ fontSize: 24, margin: '4px 0 0', fontFamily: 'Space Grotesk, sans-serif' }}>{machine.name}</h1>
+        <h1 style={{ fontSize: 24, margin: '4px 0 0', fontFamily: 'Space Grotesk, sans-serif' }}>
+          {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
+        </h1>
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 24 }}>
         <tbody>
           <Row label="Kod urządzenia" value={machine.id} />
+          <Row label="Nr porządkowy" value={machine.sequence_number || '—'} />
+          <Row label="Nr seryjny" value={machine.serial_number || '—'} />
           <Row label="Lokalizacja" value={machine.location || '—'} />
           <Row label="Częstotliwość przeglądów" value={INTERVAL_LABELS[machine.interval_type] + (machine.interval_type === 'custom' ? ` (${machine.custom_days} dni)` : '')} />
           <Row label="Data przeglądu" value={fmtDateTime(inspection.date)} />
@@ -70,7 +74,7 @@ export function PeriodReport({ machines, inspections, from, to }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid #111', textAlign: 'left' }}>
-            <Th>Data</Th><Th>Maszyna</Th><Th>Lokalizacja</Th><Th>Wykonał</Th><Th>Wynik</Th><Th>Uwagi</Th>
+            <Th>Data</Th><Th>Maszyna</Th><Th>Nr porządkowy</Th><Th>Lokalizacja</Th><Th>Wykonał</Th><Th>Wynik</Th><Th>Uwagi</Th>
           </tr>
         </thead>
         <tbody>
@@ -80,6 +84,7 @@ export function PeriodReport({ machines, inspections, from, to }) {
               <tr key={r.id} style={{ borderBottom: '1px solid #ddd' }}>
                 <Td>{fmtDate(r.date)}</Td>
                 <Td>{m ? m.name : r.machine_id}</Td>
+                <Td>{m ? (m.sequence_number || '—') : '—'}</Td>
                 <Td>{m ? m.location : '—'}</Td>
                 <Td>{r.technician_name}</Td>
                 <Td>{r.result === 'ok' ? 'Sprawna' : 'Usterka'}</Td>
@@ -87,7 +92,7 @@ export function PeriodReport({ machines, inspections, from, to }) {
               </tr>
             );
           })}
-          {rows.length === 0 && <tr><Td colSpan={6}>Brak przeglądów w wybranym okresie.</Td></tr>}
+          {rows.length === 0 && <tr><Td colSpan={7}>Brak przeglądów w wybranym okresie.</Td></tr>}
         </tbody>
       </table>
       <div style={{ marginTop: 30, fontSize: 10, color: '#888' }}>Wygenerowano automatycznie · {fmtDateTime(new Date().toISOString())} · liczba pozycji: {rows.length}</div>
@@ -102,8 +107,11 @@ export function QrSheet({ machines, siteUrl }) {
         {machines.map((m) => (
           <div key={m.id} style={{ border: '1px solid #999', borderRadius: 8, padding: 12, textAlign: 'center', pageBreakInside: 'avoid' }}>
             <img src={qrUrl(`${siteUrl}/m/${m.id}`, 180)} alt={m.id} style={{ width: '100%', maxWidth: 150, margin: '0 auto' }} />
-            <div style={{ fontWeight: 700, fontSize: 13, marginTop: 6 }}>{m.name}</div>
+            <div style={{ fontWeight: 700, fontSize: 13, marginTop: 6 }}>
+              {m.name}{m.sequence_number ? ` (${m.sequence_number})` : ''}
+            </div>
             <div style={{ fontSize: 11, color: '#555' }}>{m.location || ''}</div>
+            {m.serial_number && <div style={{ fontSize: 10, color: '#777' }}>SN: {m.serial_number}</div>}
             <div style={{ fontFamily: 'monospace', fontSize: 11, marginTop: 4 }}>{m.id}</div>
           </div>
         ))}

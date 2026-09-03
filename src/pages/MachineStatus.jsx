@@ -95,7 +95,12 @@ export default function MachineStatus() {
           <div className="text-sm text-muted" style={{ marginBottom: 4 }}>
             {machine.location || 'Brak lokalizacji'} · <span style={{ fontFamily: 'monospace' }}>{machine.id}</span>
           </div>
-          <h1 style={{ fontSize: 22, margin: '0 0 10px' }}>{machine.name}</h1>
+          <h1 style={{ fontSize: 22, margin: '0 0 6px' }}>
+            {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
+          </h1>
+          {machine.serial_number && (
+            <div className="text-sm text-muted" style={{ marginBottom: 10 }}>Nr seryjny: {machine.serial_number}</div>
+          )}
           <span className={`badge ${meta.className}`} style={{ fontSize: 14, padding: '8px 14px' }}>{meta.label}</span>
           <p className="text-sm text-muted" style={{ marginTop: 10 }}>
             {status === 'overdue'

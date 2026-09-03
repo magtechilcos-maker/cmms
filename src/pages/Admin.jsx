@@ -1,11 +1,15 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode, LogOut, ShieldCheck } from 'lucide-react';
 import { supabase, SITE_URL } from '../supabaseClient';
+import { useAuth } from '../AuthContext';
 import Modal from '../components/Modal';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, uid, qrUrl } from '../lib/status';
 import { PeriodReport, QrSheet } from '../components/PrintReports';
 
 export default function Admin() {
+  const { mechanic, logout } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState('machines');
   const [machines, setMachines] = useState([]);
   const [mechanics, setMechanics] = useState([]);
@@ -16,7 +20,16 @@ export default function Admin() {
   const [mechanicForm, setMechanicForm] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // {type:'machine'|'mechanic', item}
   const [printJob, setPrintJob] = useState(null);
-  const [selectedForQr, setSelectedForQr] = useState([]);
+
+  useEffect(() => {
+    if (!mechanic) {
+      navigate('/login', { state: { returnTo: '/admin' } });
+      return;
+    }
+    if (!mechanic.is_admin) {
+      navigate('/dashboard', { replace: true, state: { deniedAdmin: true } });
+    }
+  }, [mechanic, navigate]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -31,7 +44,11 @@ export default function Admin() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (mechanic?.is_admin) load();
+  }, [mechanic, load]);
+
+  if (!mechanic || !mechanic.is_admin) return null;
 
   useEffect(() => {
     if (printJob) {
@@ -58,8 +75,8 @@ export default function Admin() {
     load();
   };
 
-  const saveMechanic = async ({ id, name, pin }) => {
-    const { error } = await supabase.rpc('upsert_mechanic', { p_name: name, p_pin: pin || null, p_id: id || null });
+  const saveMechanic = async ({ id, name, pin, is_admin }) => {
+    const { error } = await supabase.rpc('upsert_mechanic', { p_name: name, p_pin: pin || null, p_id: id || null, p_is_admin: is_admin });
     if (error) { alert('Błąd zapisu: ' + error.message); return; }
     setMechanicForm(null);
     load();
@@ -78,6 +95,9 @@ export default function Admin() {
 
       <div className="topbar">
         <div className="brand"><Wrench size={20} /> Panel administratora</div>
+        <button className="btn btn-ghost" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => { logout(); navigate('/login'); }}>
+          <LogOut size={16} /> {mechanic.name}
+        </button>
       </div>
 
       <div className="container-wide">
@@ -178,9 +198,10 @@ function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete }) {
         return (
           <div className="row" key={m.id}>
             <div className="row-main" style={{ cursor: 'default' }}>
-              <div className="row-title">{m.name}</div>
+              <div className="row-title">{m.name}{m.sequence_number ? ` (${m.sequence_number})` : ''}</div>
               <div className="row-sub">
                 {m.location || 'Brak lokalizacji'} · {INTERVAL_LABELS[m.interval_type]} · termin: {fmtDate(dueDate)} · mechanik: {mechanicById[m.assigned_mechanic_id] || 'nieprzypisany'}
+                {m.serial_number && <> · nr seryjny: {m.serial_number}</>}
               </div>
             </div>
             <span className={`badge ${meta.className}`}>{meta.label}</span>
@@ -196,6 +217,8 @@ function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete }) {
 function MachineFormModal({ initial, mechanics, onSave, onClose }) {
   const [name, setName] = useState(initial?.name || '');
   const [location, setLocation] = useState(initial?.location || '');
+  const [serialNumber, setSerialNumber] = useState(initial?.serial_number || '');
+  const [sequenceNumber, setSequenceNumber] = useState(initial?.sequence_number || '');
   const [intervalType, setIntervalType] = useState(initial?.interval_type || 'monthly');
   const [customDays, setCustomDays] = useState(initial?.custom_days || 14);
   const [assignedMechanicId, setAssignedMechanicId] = useState(initial?.assigned_mechanic_id || '');
@@ -206,6 +229,8 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
       id: initial?.id || uid('MASZ'),
       name: name.trim(),
       location: location.trim(),
+      serial_number: serialNumber.trim(),
+      sequence_number: sequenceNumber.trim(),
       interval_type: intervalType,
       custom_days: intervalType === 'custom' ? Number(customDays) : null,
       assigned_mechanic_id: assignedMechanicId || null,
@@ -223,6 +248,16 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
         <span className="field-label">Lokalizacja / linia produkcyjna</span>
         <input className="input" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="np. Hala A, Linia 2" />
       </label>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <label className="field" style={{ flex: 1 }}>
+          <span className="field-label">Nr porządkowy</span>
+          <input className="input" value={sequenceNumber} onChange={(e) => setSequenceNumber(e.target.value)} placeholder="np. D1, Z1" />
+        </label>
+        <label className="field" style={{ flex: 1 }}>
+          <span className="field-label">Nr seryjny</span>
+          <input className="input" value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} placeholder="np. SN-2024-0817" />
+        </label>
+      </div>
       <label className="field">
         <span className="field-label">Częstotliwość przeglądu</span>
         <div className="grid-choice">
@@ -272,7 +307,14 @@ function MechanicsTab({ mechanics, machines, onAdd, onEdit, onDelete }) {
       {mechanics.map((m) => (
         <div className="row" key={m.id}>
           <div className="row-main" style={{ cursor: 'default' }}>
-            <div className="row-title">{m.name}</div>
+            <div className="row-title">
+              {m.name}
+              {m.is_admin && (
+                <span className="badge badge-never" style={{ marginLeft: 8, fontSize: 11, padding: '3px 8px' }}>
+                  <ShieldCheck size={12} /> admin
+                </span>
+              )}
+            </div>
             <div className="row-sub">Przypisanych maszyn: {countByMechanic[m.id] || 0}</div>
           </div>
           <button className="btn btn-subtle" onClick={() => onEdit(m)}><Pencil size={16} /></button>
@@ -286,12 +328,13 @@ function MechanicsTab({ mechanics, machines, onAdd, onEdit, onDelete }) {
 function MechanicFormModal({ initial, onSave, onClose }) {
   const [name, setName] = useState(initial?.name || '');
   const [pin, setPin] = useState('');
+  const [isAdmin, setIsAdmin] = useState(initial?.is_admin || false);
 
   const submit = () => {
     if (!name.trim()) return;
     if (!initial && pin.length !== 4) { alert('Podaj 4-cyfrowy PIN.'); return; }
     if (pin && pin.length !== 4) { alert('PIN musi mieć 4 cyfry.'); return; }
-    onSave({ id: initial?.id, name: name.trim(), pin: pin || null });
+    onSave({ id: initial?.id, name: name.trim(), pin: pin || null, is_admin: isAdmin });
   };
 
   return (
@@ -303,6 +346,10 @@ function MechanicFormModal({ initial, onSave, onClose }) {
       <label className="field">
         <span className="field-label">{initial ? 'Nowy PIN (zostaw puste, aby nie zmieniać)' : 'PIN (4 cyfry)'}</span>
         <input className="input" inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" />
+      </label>
+      <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} style={{ width: 16, height: 16 }} />
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Uprawnienia administratora (dostęp do panelu /admin)</span>
       </label>
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-ghost" onClick={onClose}>Anuluj</button>

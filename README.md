@@ -76,20 +76,22 @@ Jeśli wolisz, żeby po instalacji aplikacja od razu otwierała listę zadań me
 
 ## 5. Pierwsze kroki w aplikacji
 
-1. Wejdź na `https://twoja-aplikacja.vercel.app/admin`.
-2. Zakładka **Mechanicy** → dodaj mechaników (imię i nazwisko + PIN, który będą podawać przy logowaniu).
-3. Zakładka **Maszyny** → dodaj maszyny/linie, ustaw częstotliwość przeglądu i przypisz mechanika.
-4. Zakładka **Raporty i etykiety** → wydrukuj arkusz kodów QR i naklej je na maszynach.
-5. Mechanicy logują się pod adresem głównym (`https://twoja-aplikacja.vercel.app`) swoim imieniem i PIN-em i widzą listę zadań na dziś.
-6. Skanując kod QR na maszynie dowolnym telefonem, każdy (nawet niezalogowany) zobaczy status przeglądu; żeby zarejestrować przegląd, trzeba się zalogować.
+1. W SQL Editor Supabase odszukaj na końcu `schema.sql` blok **PIERWSZY ADMINISTRATOR** — podmień w nim `'Jan Kowalski'` i `'1234'` na swoje dane (jeśli już uruchomiłeś schemat wcześniej bez tego bloku, po prostu wklej i uruchom sam ten fragment osobno).
+2. Wejdź na `https://twoja-aplikacja.vercel.app/login` i zaloguj się danymi, które przed chwilą ustawiłeś — trafisz na listę zadań, a w prawym górnym rogu masz swoje imię. Wejście na `/admin` powinno teraz Cię wpuścić, bo ten pierwszy mechanik ma zaznaczone uprawnienia administratora.
+3. Zakładka **Mechanicy** → dodaj resztę mechaników (imię, PIN, i opcjonalnie zaznacz "Uprawnienia administratora" dla kolejnych osób, które mają mieć dostęp do panelu).
+4. Zakładka **Maszyny** → dodaj maszyny/linie, ustaw częstotliwość przeglądu i przypisz mechanika.
+5. Zakładka **Raporty i etykiety** → wydrukuj arkusz kodów QR i naklej je na maszynach.
+6. Mechanicy logują się pod adresem głównym (`https://twoja-aplikacja.vercel.app`) swoim imieniem i PIN-em i widzą listę zadań na dziś. Osoby bez uprawnień administratora, które spróbują wejść na `/admin`, zostaną przekierowane z powrotem do swojej listy zadań.
+7. Skanując kod QR na maszynie dowolnym telefonem, każdy (nawet niezalogowany) zobaczy status przeglądu; żeby zarejestrować przegląd, trzeba się zalogować.
 
 ## Uwagi dot. bezpieczeństwa
 
 To rozwiązanie jest pomyślane jako **wewnętrzne narzędzie dla małego zespołu**, a nie publiczny system z pełnym uwierzytelnianiem. Logowanie mechanika (imię + 4-cyfrowy PIN) jest celowo proste. Warto wiedzieć:
 
+- Dostęp do panelu `/admin` wymaga zalogowania się jako mechanik z zaznaczonym polem "Uprawnienia administratora" — osoby bez tej flagi są automatycznie przekierowywane do swojej listy zadań.
 - PIN-y są przechowywane w bazie w postaci zahaszowanej (nikt nie widzi ich wprost).
-- Klucz `anon` używany przez stronę ma jednak prawo zapisu do tabel `machines` i `inspections` — to konieczne, bo strona nie loguje się do Supabase "na sztywno". W praktyce oznacza to, że ktoś, kto pozna adres Twojej aplikacji i klucz `anon` (widoczny w kodzie strony), technicznie mógłby zapisywać dane bezpośrednio przez API Supabase, z pominięciem interfejsu.
-- Dla wewnętrznego systemu w zaufanym zespole to zwykle akceptowalne ryzyko. Jeśli w przyszłości potrzebujesz twardszej ochrony (np. panel `/admin` dostępny bez ograniczeń każdemu, kto zna adres), warto dodać pełne logowanie Supabase Auth dla roli kierownika/administratora — mogę pomóc to rozbudować.
+- Klucz `anon` używany przez stronę ma jednak prawo zapisu do tabel `machines` i `inspections` — to konieczne, bo strona nie loguje się do Supabase "na sztywno". W praktyce oznacza to, że ktoś, kto pozna adres Twojej aplikacji i klucz `anon` (widoczny w kodzie strony), technicznie mógłby zapisywać dane bezpośrednio przez API Supabase, z pominięciem interfejsu i ekranu logowania.
+- Dla wewnętrznego systemu w zaufanym zespole to zwykle akceptowalne ryzyko. Jeśli w przyszłości potrzebujesz twardszej ochrony (np. żeby dane były niedostępne nawet przy znajomości klucza `anon`), warto dodać pełne logowanie Supabase Auth dla roli kierownika/administratora — mogę pomóc to rozbudować.
 
 ## Struktura projektu
 
