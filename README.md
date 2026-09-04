@@ -1,4 +1,4 @@
-# CMMS Przeglądy
+# System przeglądów prewencyjnych dla IL Cosmetics Polska
 
 Aplikacja webowa do harmonogramowania przeglądów technicznych maszyn i linii produkcyjnych:
 
@@ -67,7 +67,7 @@ Aplikacja jest przygotowana jako PWA (Progressive Web App), więc po wdrożeniu 
 
 1. Otwórz `https://twoja-aplikacja.vercel.app/admin` w **Chrome** albo **Edge** (to jedyne przeglądarki na Windows, które to obsługują).
 2. Po prawej stronie paska adresu pojawi się ikona instalacji (komputer ze strzałką) — kliknij ją, a potem **Zainstaluj**.
-   - Jeśli ikony nie widać: menu (⋮) → **Zainstaluj CMMS Przeglądy...** (Chrome) albo **Aplikacje → Zainstaluj tę stronę jako aplikację** (Edge).
+   - Jeśli ikony nie widać: menu (⋮) → **Zainstaluj System przeglądów prewencyjnych...** (Chrome) albo **Aplikacje → Zainstaluj tę stronę jako aplikację** (Edge).
 3. Aplikacja pojawi się jako osobny program — z ikoną na pulpicie i w menu Start, we własnym oknie.
 
 Uwaga: to dalej ta sama strona internetowa "w przebraniu" — do działania nadal potrzebuje internetu i łączy się z tą samą bazą Supabase. Telefony mechaników skanujące kody QR działają zupełnie niezależnie od tego, czy ktoś zainstalował aplikację na komputerze, czy nie.

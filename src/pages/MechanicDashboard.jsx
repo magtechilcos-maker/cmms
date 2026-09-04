@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, resolveChecklist } from '../lib/status';
 import InspectionForm from '../components/InspectionForm';
+import PrintDetailsPrompt from '../components/PrintDetailsPrompt';
 import { InspectionReport } from '../components/PrintReports';
 
 export default function MechanicDashboard() {
@@ -16,6 +17,7 @@ export default function MechanicDashboard() {
   const [loading, setLoading] = useState(true);
   const [inspecting, setInspecting] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [pendingPrint, setPendingPrint] = useState(null);
   const [printJob, setPrintJob] = useState(null);
 
   const load = useCallback(async () => {
@@ -55,10 +57,7 @@ export default function MechanicDashboard() {
     const machine = inspecting;
     setInspecting(null);
     await load();
-    setPrintJob({
-      machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, templates) },
-      inspection: rec,
-    });
+    setPendingPrint({ machine, inspection: rec });
   };
 
   if (!mechanic) return null;
@@ -72,7 +71,7 @@ export default function MechanicDashboard() {
 
   return (
     <div className="page">
-      {printJob && <InspectionReport machine={printJob.machine} inspection={printJob.inspection} />}
+      {printJob && <InspectionReport machine={printJob.machine} inspection={printJob.inspection} docNumber={printJob.docNumber} approvalDate={printJob.approvalDate} />}
 
       <div className="topbar">
         <div className="brand"><ListChecks size={20} /> Moje zadania</div>
@@ -131,6 +130,23 @@ export default function MechanicDashboard() {
           saving={saving}
           onSave={saveInspection}
           onClose={() => setInspecting(null)}
+        />
+      )}
+
+      {pendingPrint && (
+        <PrintDetailsPrompt
+          defaultDocNumber={`${pendingPrint.machine.id}-${pendingPrint.inspection.date.slice(0, 10).replace(/-/g, '')}`}
+          onCancel={() => setPendingPrint(null)}
+          onConfirm={(docNumber, approvalDate) => {
+            const { machine, inspection: rec } = pendingPrint;
+            setPendingPrint(null);
+            setPrintJob({
+              machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, templates) },
+              inspection: rec,
+              docNumber,
+              approvalDate,
+            });
+          }}
         />
       )}
     </div>

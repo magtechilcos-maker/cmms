@@ -1,6 +1,6 @@
 {
-  "name": "CMMS Przeglądy",
-  "short_name": "CMMS",
+  "name": "System przeglądów prewencyjnych dla IL Cosmetics Polska",
+  "short_name": "Przeglądy IL",
   "description": "Harmonogramowanie przeglądów technicznych maszyn i linii produkcyjnych",
   "start_url": "/admin",
   "scope": "/",

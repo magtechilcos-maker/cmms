@@ -5,6 +5,7 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, fmtDateTime, resolveChecklist } from '../lib/status';
 import InspectionForm from '../components/InspectionForm';
+import PrintDetailsPrompt from '../components/PrintDetailsPrompt';
 import { InspectionReport, BlankChecklistSheet } from '../components/PrintReports';
 
 export default function MachineStatus() {
@@ -18,6 +19,7 @@ export default function MachineStatus() {
   const [notFound, setNotFound] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingPrint, setPendingPrint] = useState(null); // {kind:'inspection'|'checklist', inspection?}
   const [printJob, setPrintJob] = useState(null);
 
   const load = useCallback(async () => {
@@ -67,11 +69,7 @@ export default function MachineStatus() {
     if (error) { alert('Błąd zapisu: ' + error.message); return; }
     setInspecting(false);
     await load();
-    setPrintJob({
-      type: 'inspection',
-      machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, template ? [template] : []) },
-      inspection: rec,
-    });
+    setPendingPrint({ kind: 'inspection', inspection: rec });
   };
 
   if (loading) return <div className="center-screen text-muted">Wczytywanie…</div>;
@@ -90,11 +88,11 @@ export default function MachineStatus() {
 
   return (
     <div className="page">
-      {printJob?.type === 'inspection' && <InspectionReport machine={printJob.machine} inspection={printJob.inspection} />}
-      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={{ ...machine, checklist_items: resolveChecklist(machine, template ? [template] : []) }} />}
+      {printJob?.type === 'inspection' && <InspectionReport machine={printJob.machine} inspection={printJob.inspection} docNumber={printJob.docNumber} approvalDate={printJob.approvalDate} />}
+      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={printJob.machine} docNumber={printJob.docNumber} approvalDate={printJob.approvalDate} />}
 
       <div className="topbar">
-        <div className="brand"><Wrench size={20} /> CMMS Przeglądy</div>
+        <div className="brand"><Wrench size={20} /> System przeglądów prewencyjnych dla IL Cosmetics Polska</div>
         {!mechanic && (
           <button className="btn btn-ghost" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => navigate('/login', { state: { returnTo: `/m/${machineId}` } })}>
             <LogIn size={16} /> Zaloguj
@@ -124,7 +122,7 @@ export default function MachineStatus() {
           <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={startInspection}>
             <CheckCircle2 size={16} /> Zarejestruj przegląd
           </button>
-          <button className="btn btn-subtle" style={{ marginTop: 10, marginLeft: 8 }} onClick={() => setPrintJob({ type: 'checklist' })}>
+          <button className="btn btn-subtle" style={{ marginTop: 10, marginLeft: 8 }} onClick={() => setPendingPrint({ kind: 'checklist' })}>
             <Printer size={16} /> Drukuj kartę kontrolną
           </button>
         </div>
@@ -151,6 +149,28 @@ export default function MachineStatus() {
           saving={saving}
           onSave={saveInspection}
           onClose={() => setInspecting(false)}
+        />
+      )}
+
+      {pendingPrint && (
+        <PrintDetailsPrompt
+          defaultDocNumber={pendingPrint.kind === 'inspection' ? `${machine.id}-${pendingPrint.inspection.date.slice(0, 10).replace(/-/g, '')}` : `${machine.id}-KARTA`}
+          onCancel={() => setPendingPrint(null)}
+          onConfirm={(docNumber, approvalDate) => {
+            const effectiveChecklist = resolveChecklist(machine, template ? [template] : []);
+            if (pendingPrint.kind === 'inspection') {
+              setPrintJob({
+                type: 'inspection',
+                machine: { ...machine, last_inspection_date: pendingPrint.inspection.date, checklist_items: effectiveChecklist },
+                inspection: pendingPrint.inspection,
+                docNumber,
+                approvalDate,
+              });
+            } else {
+              setPrintJob({ type: 'checklist', machine: { ...machine, checklist_items: effectiveChecklist }, docNumber, approvalDate });
+            }
+            setPendingPrint(null);
+          }}
         />
       )}
     </div>

@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode, LogOut,
 import { supabase, SITE_URL } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import Modal from '../components/Modal';
+import PrintDetailsPrompt from '../components/PrintDetailsPrompt';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, uid, qrUrl, resolveChecklist } from '../lib/status';
 import { PeriodReport, QrSheet, BlankChecklistSheet } from '../components/PrintReports';
 
@@ -21,6 +22,7 @@ export default function Admin() {
   const [mechanicForm, setMechanicForm] = useState(null);
   const [templateForm, setTemplateForm] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // {type:'machine'|'mechanic'|'template', item}
+  const [pendingChecklistPrint, setPendingChecklistPrint] = useState(null);
   const [printJob, setPrintJob] = useState(null);
 
   useEffect(() => {
@@ -109,14 +111,14 @@ export default function Admin() {
   };
 
   const printChecklistFor = (m) => {
-    setPrintJob({ type: 'checklist', machine: { ...m, checklist_items: resolveChecklist(m, templates) } });
+    setPendingChecklistPrint(m);
   };
 
   return (
     <div className="page">
       {printJob?.type === 'period' && <PeriodReport machines={machines} inspections={inspections} from={printJob.from} to={printJob.to} />}
       {printJob?.type === 'qrsheet' && <QrSheet machines={printJob.machines} siteUrl={SITE_URL} />}
-      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={printJob.machine} />}
+      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={printJob.machine} docNumber={printJob.docNumber} approvalDate={printJob.approvalDate} />}
 
       <div className="topbar">
         <div className="brand"><Wrench size={20} /> Panel administratora</div>
@@ -198,6 +200,18 @@ export default function Admin() {
           onClose={() => setTemplateForm(null)}
         />
       )}
+      {pendingChecklistPrint && (
+        <PrintDetailsPrompt
+          defaultDocNumber={`${pendingChecklistPrint.id}-KARTA`}
+          onCancel={() => setPendingChecklistPrint(null)}
+          onConfirm={(docNumber, approvalDate) => {
+            const m = pendingChecklistPrint;
+            setPendingChecklistPrint(null);
+            setPrintJob({ type: 'checklist', machine: { ...m, checklist_items: resolveChecklist(m, templates) }, docNumber, approvalDate });
+          }}
+        />
+      )}
+
       {confirmDelete && (
         <Modal
           title={confirmDelete.type === 'machine' ? 'Usuń maszynę' : confirmDelete.type === 'mechanic' ? 'Usuń mechanika' : 'Usuń szablon'}

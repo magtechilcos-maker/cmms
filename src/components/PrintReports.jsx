@@ -18,22 +18,48 @@ const Row = ({ label, value }) => (
 const Th = ({ children }) => <th style={{ padding: '6px 8px', fontSize: 11 }}>{children}</th>;
 const Td = ({ children, colSpan }) => <td colSpan={colSpan} style={{ padding: '6px 8px' }}>{children}</td>;
 const Sign = ({ label }) => (
-  <div style={{ flex: 1 }}>
+  <div style={{ flex: 1, maxWidth: 260 }}>
     <div style={{ borderBottom: '1px solid #333', height: 40 }} />
     <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>{label}</div>
   </div>
 );
 
-export function InspectionReport({ machine, inspection }) {
+// Nagłówek raportu: logo | tytuł dokumentu | nr dokumentu + data zatwierdzenia (bez opisów)
+function ReportHeader({ title, docNumber, approvalDate }) {
+  const cellBorder = '1px solid #333';
+  return (
+    <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 22, tableLayout: 'fixed' }}>
+      <tbody>
+        <tr>
+          <td rowSpan={2} style={{ border: cellBorder, width: '18%', height: 64, textAlign: 'center', verticalAlign: 'middle', padding: 6 }}>
+            <img src="/logo.png" alt="IL Cosmetics Group" style={{ maxWidth: '100%', maxHeight: 48, objectFit: 'contain' }} />
+          </td>
+          <td rowSpan={2} style={{ border: cellBorder, textAlign: 'center', verticalAlign: 'middle', fontSize: 19, fontWeight: 700, fontFamily: 'Space Grotesk, sans-serif', padding: '0 10px' }}>
+            {title}
+          </td>
+          <td style={{ border: cellBorder, width: '18%', textAlign: 'center', verticalAlign: 'middle', fontSize: 12, padding: '4px 6px' }}>
+            {docNumber || '\u00A0'}
+          </td>
+        </tr>
+        <tr>
+          <td style={{ border: cellBorder, textAlign: 'center', verticalAlign: 'middle', fontSize: 12, padding: '4px 6px' }}>
+            {approvalDate ? fmtDate(approvalDate) : '\u00A0'}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  );
+}
+
+export function InspectionReport({ machine, inspection, docNumber, approvalDate }) {
   const checklist = machine.checklist_items || [];
   return (
     <PrintSheet>
-      <div style={{ borderBottom: '2px solid #111', paddingBottom: 12, marginBottom: 20 }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, color: '#555' }}>RAPORT Z PRZEGLĄDU TECHNICZNEGO</div>
-        <h1 style={{ fontSize: 24, margin: '4px 0 0', fontFamily: 'Space Grotesk, sans-serif' }}>
-          {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
-        </h1>
-      </div>
+      <ReportHeader title="Raport z przeglądu technicznego" docNumber={docNumber} approvalDate={approvalDate} />
+
+      <h2 style={{ fontSize: 16, margin: '0 0 10px', fontFamily: 'Space Grotesk, sans-serif' }}>
+        {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
+      </h2>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
         <tbody>
           <Row label="Kod urządzenia" value={machine.id} />
@@ -43,40 +69,65 @@ export function InspectionReport({ machine, inspection }) {
           <Row label="Częstotliwość przeglądów" value={INTERVAL_LABELS[machine.interval_type] + (machine.interval_type === 'custom' ? ` (${machine.custom_days} dni)` : '')} />
           <Row label="Data przeglądu" value={fmtDateTime(inspection.date)} />
           <Row label="Wykonał" value={inspection.technician_name} />
-          <Row label="Wynik ogólny" value={inspection.result === 'ok' ? 'Maszyna sprawna' : 'Stwierdzono usterkę'} />
         </tbody>
       </table>
 
       <ChecklistTable items={checklist} />
 
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>UWAGI</div>
-        <div style={{ minHeight: 70, border: '1px solid #ccc', borderRadius: 6, padding: 10, fontSize: 13 }}>{inspection.notes || '—'}</div>
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>UWAGI OGÓLNE</div>
+        <div style={{ minHeight: 60, border: '1px solid #ccc', borderRadius: 6, padding: 10, fontSize: 13 }}>{inspection.notes || '—'}</div>
       </div>
-      <div style={{ display: 'flex', gap: 40, marginTop: 60 }}>
+
+      <OverallResultBox />
+
+      <div style={{ display: 'flex', marginTop: 40 }}>
         <Sign label="Podpis wykonującego" />
-        <Sign label="Podpis odbierającego" />
       </div>
-      <div style={{ marginTop: 30, fontSize: 10, color: '#888' }}>Wygenerowano automatycznie · {fmtDateTime(new Date().toISOString())}</div>
+      <div style={{ marginTop: 20, fontSize: 10, color: '#888' }}>Wygenerowano automatycznie · {fmtDateTime(new Date().toISOString())}</div>
     </PrintSheet>
   );
 }
 
-// Lista kontrolna z pustymi kratkami do ręcznego zaznaczenia (✓ lub ✗) długopisem
+// Wynik ogólny — puste kratki do ręcznego zaznaczenia na dole raportu
+function OverallResultBox() {
+  const box = { display: 'inline-block', width: 20, height: 20, border: '1.5px solid #333', borderRadius: 3, marginRight: 8, verticalAlign: 'middle' };
+  return (
+    <div style={{ marginBottom: 10, border: '1px solid #333', borderRadius: 6, padding: '12px 16px' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 10 }}>WYNIK OGÓLNY</div>
+      <div style={{ display: 'flex', gap: 36 }}>
+        <span style={{ fontSize: 14 }}><span style={box} />Sprawna</span>
+        <span style={{ fontSize: 14 }}><span style={box} />Niesprawna</span>
+      </div>
+    </div>
+  );
+}
+
+// Lista kontrolna: punkty po lewej (z pustą kratką ✓/✗), uwagi do konkretnego punktu po prawej
 function ChecklistTable({ items }) {
   if (!items || items.length === 0) return null;
+  const box = { display: 'inline-block', width: 16, height: 16, border: '1.5px solid #333', borderRadius: 3, marginRight: 8, verticalAlign: 'middle', flexShrink: 0 };
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>LISTA KONTROLNA</div>
-      <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>Zaznacz ręcznie ✓ lub ✗ przy każdym punkcie.</div>
+      <div style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>Zaznacz ręcznie ✓ lub ✗ przy każdym punkcie; w razie potrzeby dopisz uwagę.</div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid #111', textAlign: 'left' }}>
+            <th style={{ padding: '6px 8px', width: '58%' }}>Punkt kontrolny</th>
+            <th style={{ padding: '6px 8px' }}>Uwagi</th>
+          </tr>
+        </thead>
         <tbody>
           {items.map((item, i) => (
             <tr key={i} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={{ padding: '7px 4px', width: 30 }}>
-                <span style={{ display: 'inline-block', width: 20, height: 20, border: '1.5px solid #333', borderRadius: 3 }} />
+              <td style={{ padding: '9px 8px', verticalAlign: 'top' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+                  <span style={box} />
+                  <span>{item}</span>
+                </div>
               </td>
-              <td style={{ padding: '7px 4px' }}>{item}</td>
+              <td style={{ padding: '9px 8px', borderLeft: '1px solid #eee', height: 30 }}>&nbsp;</td>
             </tr>
           ))}
         </tbody>
@@ -86,16 +137,15 @@ function ChecklistTable({ items }) {
 }
 
 // Pusta karta kontrolna do wydrukowania PRZED przeglądem — do zabrania na obchód
-export function BlankChecklistSheet({ machine }) {
+export function BlankChecklistSheet({ machine, docNumber, approvalDate }) {
   const checklist = machine.checklist_items || [];
   return (
     <PrintSheet>
-      <div style={{ borderBottom: '2px solid #111', paddingBottom: 12, marginBottom: 20 }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, color: '#555' }}>KARTA KONTROLNA PRZEGLĄDU</div>
-        <h1 style={{ fontSize: 24, margin: '4px 0 0', fontFamily: 'Space Grotesk, sans-serif' }}>
-          {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
-        </h1>
-      </div>
+      <ReportHeader title="Karta kontrolna przeglądu" docNumber={docNumber} approvalDate={approvalDate} />
+
+      <h2 style={{ fontSize: 16, margin: '0 0 10px', fontFamily: 'Space Grotesk, sans-serif' }}>
+        {machine.name}{machine.sequence_number ? ` (${machine.sequence_number})` : ''}
+      </h2>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
         <tbody>
           <Row label="Kod urządzenia" value={machine.id} />
@@ -109,16 +159,18 @@ export function BlankChecklistSheet({ machine }) {
         <ChecklistTable items={checklist} />
       ) : (
         <p style={{ fontSize: 12, color: '#888', marginBottom: 20 }}>
-          Ta maszyna nie ma jeszcze zdefiniowanej listy kontrolnej — dodaj punkty w panelu administratora.
+          Ta maszyna nie ma jeszcze zdefiniowanej listy kontrolnej — dodaj punkty (lub przypisz szablon) w panelu administratora.
         </p>
       )}
       <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>UWAGI</div>
-        <div style={{ minHeight: 90, border: '1px solid #ccc', borderRadius: 6, padding: 10 }} />
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>UWAGI OGÓLNE</div>
+        <div style={{ minHeight: 70, border: '1px solid #ccc', borderRadius: 6, padding: 10 }} />
       </div>
-      <div style={{ display: 'flex', gap: 40, marginTop: 40 }}>
+
+      <OverallResultBox />
+
+      <div style={{ display: 'flex', marginTop: 30 }}>
         <Sign label="Podpis wykonującego" />
-        <Sign label="Podpis odbierającego" />
       </div>
     </PrintSheet>
   );
@@ -131,12 +183,10 @@ export function PeriodReport({ machines, inspections, from, to }) {
   const machineById = Object.fromEntries(machines.map((m) => [m.id, m]));
   return (
     <PrintSheet>
-      <div style={{ borderBottom: '2px solid #111', paddingBottom: 12, marginBottom: 20 }}>
-        <div style={{ fontSize: 11, letterSpacing: 1, color: '#555' }}>RAPORT ZBIORCZY Z PRZEGLĄDÓW</div>
-        <h1 style={{ fontSize: 22, margin: '4px 0 0', fontFamily: 'Space Grotesk, sans-serif' }}>
-          {from || to ? `Okres: ${from ? fmtDate(from) : '...'} – ${to ? fmtDate(to) : '...'}` : 'Pełna historia'}
-        </h1>
-      </div>
+      <ReportHeader title="Raport zbiorczy z przeglądów" docNumber="" approvalDate="" />
+      <p style={{ fontSize: 13, color: '#555', marginTop: -10, marginBottom: 16 }}>
+        {from || to ? `Okres: ${from ? fmtDate(from) : '...'} – ${to ? fmtDate(to) : '...'}` : 'Pełna historia'}
+      </p>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid #111', textAlign: 'left' }}>

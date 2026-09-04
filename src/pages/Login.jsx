@@ -46,7 +46,7 @@ export default function Login() {
       <div className="card" style={{ width: '100%', maxWidth: 360 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
           <Wrench size={22} color="var(--steel)" />
-          <h1 style={{ fontSize: 20, margin: 0 }}>CMMS Przeglądy</h1>
+          <h1 style={{ fontSize: 20, margin: 0 }}>System przeglądów prewencyjnych dla IL Cosmetics Polska</h1>
         </div>
         <p className="text-sm text-muted" style={{ marginTop: 4 }}>Zaloguj się, aby zobaczyć swoje zadania na dziś.</p>
         <form onSubmit={submit}>
