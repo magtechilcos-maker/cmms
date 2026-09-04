@@ -74,7 +74,45 @@ Uwaga: to dalej ta sama strona internetowa "w przebraniu" — do działania nada
 
 Jeśli wolisz, żeby po instalacji aplikacja od razu otwierała listę zadań mechanika zamiast panelu admina, zainstaluj ją analogicznie z adresu `https://twoja-aplikacja.vercel.app/dashboard` zamiast `/admin` — możesz mieć obie zainstalowane naraz, jako dwie osobne ikony.
 
-## 5. Pierwsze kroki w aplikacji
+## 5. Import 127 maszyn i 12 pracowników z Twojego starego systemu
+
+W paczce jest gotowy plik **`supabase/import_data.sql`**, wygenerowany bezpośrednio z Twojej bazy `system_serwisowy.db`. Zawiera:
+
+- 12 pracowników jako mechaników (z tymczasowymi PIN-ami — patrz niżej),
+- 12 szablonów list kontrolnych (pogrupowane automatycznie wg identycznych punktów, żeby nie duplikować tego samego zestawu dla dziesiątek podobnych maszyn),
+- 127 maszyn, z przypisanym mechanikiem, numerem seryjnym, numerem porządkowym i szablonem listy kontrolnej.
+
+**Kolejność uruchamiania w SQL Editor (ważne):**
+1. Najpierw cały `supabase/schema.sql` (jak dotychczas).
+2. Potem cały `supabase/import_data.sql` — jednorazowo. Jest bezpieczny do ponownego uruchomienia (pomija rekordy, które już istnieją), więc nic się nie stanie, jeśli uruchomisz go przez pomyłkę dwa razy.
+
+**Rzeczy, o których warto wiedzieć po imporcie:**
+- Wszystkie zaimportowane maszyny dostały częstotliwość **"co tydzień"** — tak działał Twój poprzedni system. Jeśli któraś powinna być przeglądana rzadziej, zmień to w panelu admina.
+- Stary system przypisywał konkretny **dzień tygodnia** do każdej maszyny (np. "poniedziałek") — nowy system tego nie wymusza (liczy termin od daty ostatniego przeglądu, a nie od stałego dnia), ale dla orientacji dopisałem tę informację do pola "Lokalizacja" każdej maszyny.
+- Każdy pracownik dostał **tymczasowy 4-cyfrowy PIN = 1000 + jego stare ID** z poprzedniego systemu. Rozdaj im poniższą listę i poproś, żeby jak najszybciej poprosili Cię o zmianę PIN-u w panelu Mechanicy (dla bezpieczeństwa nie ma samoobsługowej zmiany PIN-u — robi to administrator):
+
+  | Pracownik | Tymczasowy PIN |
+  |---|---|
+  | Białorucki Damian | 1001 |
+  | Jakubowski Marcin | 1002 |
+  | Konopa Jan | 1003 |
+  | Kurzęcki Piotr | 1004 |
+  | Pikus Kamil | 1005 |
+  | Pikus Mateusz | 1006 |
+  | Potyrała Bartosz | 1007 |
+  | Rębecki Kamil | 1008 |
+  | Różycki Adam | 1009 |
+  | Stefański Mariusz | 1010 |
+  | Tomaszewski Piotr | 1011 |
+  | Wodzyński Witold | 1012 |
+
+  Nie zapisuj tej tabeli w publicznie dostępnym miejscu (np. w repozytorium GitHub) — to tylko tymczasowe hasła startowe.
+
+## Szablony list kontrolnych
+
+Zamiast wpisywać te same kilkanaście punktów kontrolnych dla każdej z podobnych maszyn, w panelu admina jest teraz zakładka **"Szablony list kontrolnych"**: definiujesz listę raz (np. dla "Drukarka", "Zgrzewarka"), a przy dodawaniu/edycji maszyny tylko wybierasz gotowy szablon z listy. Jeśli konkretna maszyna ma się różnić, możesz dodatkowo wpisać jej **własną listę** w formularzu maszyny — nadpisze ona szablon tylko dla tej jednej maszyny.
+
+## 6. Pierwsze kroki w aplikacji (jeśli zaczynasz od zera, bez importu)
 
 1. W SQL Editor Supabase odszukaj na końcu `schema.sql` blok **PIERWSZY ADMINISTRATOR** — podmień w nim `'Jan Kowalski'` i `'1234'` na swoje dane (jeśli już uruchomiłeś schemat wcześniej bez tego bloku, po prostu wklej i uruchom sam ten fragment osobno).
 2. Wejdź na `https://twoja-aplikacja.vercel.app/login` i zaloguj się danymi, które przed chwilą ustawiłeś — trafisz na listę zadań, a w prawym górnym rogu masz swoje imię. Wejście na `/admin` powinno teraz Cię wpuścić, bo ten pierwszy mechanik ma zaznaczone uprawnienia administratora.

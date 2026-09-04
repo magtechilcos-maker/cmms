@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { LogOut, CheckCircle2, ListChecks } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
-import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate } from '../lib/status';
+import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, resolveChecklist } from '../lib/status';
 import InspectionForm from '../components/InspectionForm';
 import { InspectionReport } from '../components/PrintReports';
 
@@ -12,6 +12,7 @@ export default function MechanicDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const [machines, setMachines] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [inspecting, setInspecting] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -20,8 +21,12 @@ export default function MechanicDashboard() {
   const load = useCallback(async () => {
     if (!mechanic) return;
     setLoading(true);
-    const { data } = await supabase.from('machines').select('*').eq('assigned_mechanic_id', mechanic.id);
+    const [{ data }, { data: tpl }] = await Promise.all([
+      supabase.from('machines').select('*').eq('assigned_mechanic_id', mechanic.id),
+      supabase.from('checklist_templates').select('*'),
+    ]);
     setMachines(data || []);
+    setTemplates(tpl || []);
     setLoading(false);
   }, [mechanic]);
 
@@ -50,7 +55,10 @@ export default function MechanicDashboard() {
     const machine = inspecting;
     setInspecting(null);
     await load();
-    setPrintJob({ machine: { ...machine, last_inspection_date: rec.date }, inspection: rec });
+    setPrintJob({
+      machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, templates) },
+      inspection: rec,
+    });
   };
 
   if (!mechanic) return null;

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, Wrench, LogIn, Printer } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
-import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, fmtDateTime } from '../lib/status';
+import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, fmtDateTime, resolveChecklist } from '../lib/status';
 import InspectionForm from '../components/InspectionForm';
 import { InspectionReport, BlankChecklistSheet } from '../components/PrintReports';
 
@@ -12,6 +12,7 @@ export default function MachineStatus() {
   const { mechanic } = useAuth();
   const navigate = useNavigate();
   const [machine, setMachine] = useState(null);
+  const [template, setTemplate] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -24,6 +25,12 @@ export default function MachineStatus() {
     const { data: m } = await supabase.from('machines').select('*').eq('id', machineId).maybeSingle();
     if (!m) { setNotFound(true); setLoading(false); return; }
     setMachine(m);
+    if (m.checklist_template_id) {
+      const { data: tpl } = await supabase.from('checklist_templates').select('*').eq('id', m.checklist_template_id).maybeSingle();
+      setTemplate(tpl || null);
+    } else {
+      setTemplate(null);
+    }
     const { data: h } = await supabase
       .from('inspections')
       .select('*')
@@ -60,7 +67,11 @@ export default function MachineStatus() {
     if (error) { alert('Błąd zapisu: ' + error.message); return; }
     setInspecting(false);
     await load();
-    setPrintJob({ type: 'inspection', machine: { ...machine, last_inspection_date: rec.date }, inspection: rec });
+    setPrintJob({
+      type: 'inspection',
+      machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, template ? [template] : []) },
+      inspection: rec,
+    });
   };
 
   if (loading) return <div className="center-screen text-muted">Wczytywanie…</div>;
@@ -80,7 +91,7 @@ export default function MachineStatus() {
   return (
     <div className="page">
       {printJob?.type === 'inspection' && <InspectionReport machine={printJob.machine} inspection={printJob.inspection} />}
-      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={machine} />}
+      {printJob?.type === 'checklist' && <BlankChecklistSheet machine={{ ...machine, checklist_items: resolveChecklist(machine, template ? [template] : []) }} />}
 
       <div className="topbar">
         <div className="brand"><Wrench size={20} /> CMMS Przeglądy</div>

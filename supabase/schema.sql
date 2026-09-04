@@ -29,6 +29,29 @@ grant select on mechanics_public to anon, authenticated;
 revoke all on mechanics from anon, authenticated;
 
 -- ---------------------------------------------------------
+-- SZABLONY LIST KONTROLNYCH
+-- Pozwalają zdefiniować listę punktów raz (np. dla typu maszyny)
+-- i przypisać ją do wielu maszyn zamiast wpisywać punkty osobno
+-- dla każdej z nich.
+-- ---------------------------------------------------------
+create table if not exists checklist_templates (
+  id uuid primary key default gen_random_uuid(),
+  name text unique not null,
+  items text[] not null default '{}',
+  created_at timestamptz default now()
+);
+
+alter table checklist_templates enable row level security;
+
+drop policy if exists "checklist_templates_public_read" on checklist_templates;
+create policy "checklist_templates_public_read" on checklist_templates
+  for select using (true);
+
+drop policy if exists "checklist_templates_public_write" on checklist_templates;
+create policy "checklist_templates_public_write" on checklist_templates
+  for all using (true) with check (true);
+
+-- ---------------------------------------------------------
 -- MASZYNY / LINIE
 -- ---------------------------------------------------------
 create table if not exists machines (
@@ -37,7 +60,8 @@ create table if not exists machines (
   location text,
   serial_number text,                      -- nr seryjny urządzenia
   sequence_number text,                    -- nr porządkowy, np. D1, Z1
-  checklist_items text[] not null default '{}', -- punkty kontrolne, np. {"Poziom oleju","Osłony bezpieczeństwa"}
+  checklist_items text[] not null default '{}', -- własna lista (nadpisuje szablon, jeśli niepusta)
+  checklist_template_id uuid references checklist_templates(id) on delete set null,
   interval_type text not null check (interval_type in ('weekly','monthly','custom')),
   custom_days int,
   assigned_mechanic_id uuid references mechanics(id) on delete set null,
@@ -49,6 +73,7 @@ alter table machines enable row level security;
 alter table machines add column if not exists serial_number text;
 alter table machines add column if not exists sequence_number text;
 alter table machines add column if not exists checklist_items text[] not null default '{}';
+alter table machines add column if not exists checklist_template_id uuid references checklist_templates(id) on delete set null;
 
 drop policy if exists "machines_public_read" on machines;
 create policy "machines_public_read" on machines

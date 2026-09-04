@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode, LogOut, ShieldCheck } from 'lucide-react';
+import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode, LogOut, ShieldCheck, ListChecks } from 'lucide-react';
 import { supabase, SITE_URL } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import Modal from '../components/Modal';
-import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, uid, qrUrl } from '../lib/status';
+import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, uid, qrUrl, resolveChecklist } from '../lib/status';
 import { PeriodReport, QrSheet, BlankChecklistSheet } from '../components/PrintReports';
 
 export default function Admin() {
@@ -14,11 +14,13 @@ export default function Admin() {
   const [machines, setMachines] = useState([]);
   const [mechanics, setMechanics] = useState([]);
   const [inspections, setInspections] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [machineForm, setMachineForm] = useState(null); // {} for new, object for edit, null closed
   const [mechanicForm, setMechanicForm] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null); // {type:'machine'|'mechanic', item}
+  const [templateForm, setTemplateForm] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // {type:'machine'|'mechanic'|'template', item}
   const [printJob, setPrintJob] = useState(null);
 
   useEffect(() => {
@@ -33,14 +35,16 @@ export default function Admin() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: m }, { data: mech }, { data: insp }] = await Promise.all([
+    const [{ data: m }, { data: mech }, { data: insp }, { data: tpl }] = await Promise.all([
       supabase.from('machines').select('*').order('name'),
       supabase.from('mechanics_public').select('*').order('name'),
       supabase.from('inspections').select('*'),
+      supabase.from('checklist_templates').select('*').order('name'),
     ]);
     setMachines(m || []);
     setMechanics(mech || []);
     setInspections(insp || []);
+    setTemplates(tpl || []);
     setLoading(false);
   }, []);
 
@@ -88,6 +92,26 @@ export default function Admin() {
     load();
   };
 
+  const saveTemplate = async ({ id, name, items }) => {
+    const payload = { name: name.trim(), items: items.map((i) => i.trim()).filter(Boolean) };
+    const { error } = id
+      ? await supabase.from('checklist_templates').update(payload).eq('id', id)
+      : await supabase.from('checklist_templates').insert(payload);
+    if (error) { alert('Błąd zapisu: ' + error.message); return; }
+    setTemplateForm(null);
+    load();
+  };
+
+  const deleteTemplate = async (t) => {
+    await supabase.from('checklist_templates').delete().eq('id', t.id);
+    setConfirmDelete(null);
+    load();
+  };
+
+  const printChecklistFor = (m) => {
+    setPrintJob({ type: 'checklist', machine: { ...m, checklist_items: resolveChecklist(m, templates) } });
+  };
+
   return (
     <div className="page">
       {printJob?.type === 'period' && <PeriodReport machines={machines} inspections={inspections} from={printJob.from} to={printJob.to} />}
@@ -104,6 +128,7 @@ export default function Admin() {
       <div className="container-wide">
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           <TabBtn active={tab === 'machines'} onClick={() => setTab('machines')} icon={Wrench} label="Maszyny" />
+          <TabBtn active={tab === 'templates'} onClick={() => setTab('templates')} icon={ListChecks} label="Szablony list kontrolnych" />
           <TabBtn active={tab === 'mechanics'} onClick={() => setTab('mechanics')} icon={Users} label="Mechanicy" />
           <TabBtn active={tab === 'reports'} onClick={() => setTab('reports')} icon={FileText} label="Raporty i etykiety" />
         </div>
@@ -114,10 +139,20 @@ export default function Admin() {
               <MachinesTab
                 machines={machines}
                 mechanics={mechanics}
+                templates={templates}
                 onAdd={() => setMachineForm({})}
                 onEdit={setMachineForm}
                 onDelete={(m) => setConfirmDelete({ type: 'machine', item: m })}
-                onPrintChecklist={(m) => setPrintJob({ type: 'checklist', machine: m })}
+                onPrintChecklist={printChecklistFor}
+              />
+            )}
+            {tab === 'templates' && (
+              <TemplatesTab
+                templates={templates}
+                machines={machines}
+                onAdd={() => setTemplateForm({})}
+                onEdit={setTemplateForm}
+                onDelete={(t) => setConfirmDelete({ type: 'template', item: t })}
               />
             )}
             {tab === 'mechanics' && (
@@ -144,6 +179,7 @@ export default function Admin() {
         <MachineFormModal
           initial={machineForm.id ? machineForm : null}
           mechanics={mechanics}
+          templates={templates}
           onSave={saveMachine}
           onClose={() => setMachineForm(null)}
         />
@@ -155,16 +191,32 @@ export default function Admin() {
           onClose={() => setMechanicForm(null)}
         />
       )}
+      {templateForm && (
+        <TemplateFormModal
+          initial={templateForm.id ? templateForm : null}
+          onSave={saveTemplate}
+          onClose={() => setTemplateForm(null)}
+        />
+      )}
       {confirmDelete && (
-        <Modal title={confirmDelete.type === 'machine' ? 'Usuń maszynę' : 'Usuń mechanika'} onClose={() => setConfirmDelete(null)}>
+        <Modal
+          title={confirmDelete.type === 'machine' ? 'Usuń maszynę' : confirmDelete.type === 'mechanic' ? 'Usuń mechanika' : 'Usuń szablon'}
+          onClose={() => setConfirmDelete(null)}
+        >
           <p className="text-sm text-muted" style={{ marginBottom: 18 }}>
-            Czy na pewno chcesz usunąć „{confirmDelete.item.name}”? Tej operacji nie można cofnąć.
+            Czy na pewno chcesz usunąć „{confirmDelete.item.name}”?
+            {confirmDelete.type === 'template' && ' Maszyny korzystające z tego szablonu stracą przypisaną listę kontrolną (chyba że mają własną).'}
+            {' '}Tej operacji nie można cofnąć.
           </p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button className="btn btn-ghost" onClick={() => setConfirmDelete(null)}>Anuluj</button>
             <button
               className="btn btn-danger"
-              onClick={() => confirmDelete.type === 'machine' ? deleteMachine(confirmDelete.item) : deleteMechanic(confirmDelete.item)}
+              onClick={() => {
+                if (confirmDelete.type === 'machine') deleteMachine(confirmDelete.item);
+                else if (confirmDelete.type === 'mechanic') deleteMechanic(confirmDelete.item);
+                else deleteTemplate(confirmDelete.item);
+              }}
             >
               Usuń
             </button>
@@ -185,8 +237,9 @@ function TabBtn({ active, onClick, icon: Icon, label }) {
 
 /* ---------------- Machines tab ---------------- */
 
-function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete, onPrintChecklist }) {
+function MachinesTab({ machines, mechanics, templates, onAdd, onEdit, onDelete, onPrintChecklist }) {
   const mechanicById = Object.fromEntries(mechanics.map((m) => [m.id, m.name]));
+  const templateById = Object.fromEntries(templates.map((t) => [t.id, t.name]));
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -197,13 +250,18 @@ function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete, onPrintChec
       {machines.map((m) => {
         const { status, dueDate } = computeStatus(m);
         const meta = STATUS_META[status];
+        const checklistLabel = m.checklist_items?.length
+          ? `${m.checklist_items.length} pkt (własna)`
+          : m.checklist_template_id
+            ? `${templateById[m.checklist_template_id] || 'szablon'}`
+            : 'brak listy';
         return (
           <div className="row" key={m.id}>
             <div className="row-main" style={{ cursor: 'default' }}>
               <div className="row-title">{m.name}{m.sequence_number ? ` (${m.sequence_number})` : ''}</div>
               <div className="row-sub">
                 {m.location || 'Brak lokalizacji'} · {INTERVAL_LABELS[m.interval_type]} · termin: {fmtDate(dueDate)} · mechanik: {mechanicById[m.assigned_mechanic_id] || 'nieprzypisany'}
-                {m.serial_number && <> · nr seryjny: {m.serial_number}</>}
+                {m.serial_number && <> · nr seryjny: {m.serial_number}</>} · lista: {checklistLabel}
               </div>
             </div>
             <span className={`badge ${meta.className}`}>{meta.label}</span>
@@ -217,7 +275,7 @@ function MachinesTab({ machines, mechanics, onAdd, onEdit, onDelete, onPrintChec
   );
 }
 
-function MachineFormModal({ initial, mechanics, onSave, onClose }) {
+function MachineFormModal({ initial, mechanics, templates, onSave, onClose }) {
   const [name, setName] = useState(initial?.name || '');
   const [location, setLocation] = useState(initial?.location || '');
   const [serialNumber, setSerialNumber] = useState(initial?.serial_number || '');
@@ -225,7 +283,8 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
   const [intervalType, setIntervalType] = useState(initial?.interval_type || 'monthly');
   const [customDays, setCustomDays] = useState(initial?.custom_days || 14);
   const [assignedMechanicId, setAssignedMechanicId] = useState(initial?.assigned_mechanic_id || '');
-  const [checklist, setChecklist] = useState(initial?.checklist_items?.length ? initial.checklist_items : ['']);
+  const [templateId, setTemplateId] = useState(initial?.checklist_template_id || '');
+  const [checklist, setChecklist] = useState(initial?.checklist_items?.length ? initial.checklist_items : []);
 
   const updateChecklistItem = (i, value) => {
     setChecklist((list) => list.map((v, idx) => (idx === i ? value : v)));
@@ -241,6 +300,7 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
       location: location.trim(),
       serial_number: serialNumber.trim(),
       sequence_number: sequenceNumber.trim(),
+      checklist_template_id: templateId || null,
       checklist_items: checklist.map((c) => c.trim()).filter(Boolean),
       interval_type: intervalType,
       custom_days: intervalType === 'custom' ? Number(customDays) : null,
@@ -293,10 +353,18 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
         </select>
       </label>
 
+      <label className="field">
+        <span className="field-label">Szablon listy kontrolnej</span>
+        <select className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+          <option value="">— brak / tylko własna lista poniżej —</option>
+          {templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.items.length} pkt)</option>)}
+        </select>
+      </label>
+
       <div className="field">
-        <span className="field-label">Lista kontrolna przeglądu</span>
+        <span className="field-label">Własna lista kontrolna (opcjonalnie)</span>
         <p className="text-sm text-muted" style={{ marginTop: -4, marginBottom: 8 }}>
-          Punkty, które mechanik zaznacza ręcznie (✓/✗) na wydrukowanej karcie kontrolnej podczas przeglądu.
+          Jeśli dodasz tu punkty, nadpiszą one szablon wybrany powyżej — przydatne, gdy ta jedna maszyna różni się od reszty. Zostaw puste, żeby korzystać z szablonu.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {checklist.map((item, i) => (
@@ -307,7 +375,7 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
                 onChange={(e) => updateChecklistItem(i, e.target.value)}
                 placeholder={`np. Poziom oleju`}
               />
-              <button type="button" className="btn btn-danger" onClick={() => removeChecklistItem(i)} disabled={checklist.length === 1}>
+              <button type="button" className="btn btn-danger" onClick={() => removeChecklistItem(i)}>
                 <Trash2 size={15} />
               </button>
             </div>
@@ -322,6 +390,77 @@ function MachineFormModal({ initial, mechanics, onSave, onClose }) {
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
         <button className="btn btn-ghost" onClick={onClose}>Anuluj</button>
         <button className="btn btn-primary" onClick={submit}>{initial ? 'Zapisz zmiany' : 'Dodaj maszynę'}</button>
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------------- Templates tab ---------------- */
+
+function TemplatesTab({ templates, machines, onAdd, onEdit, onDelete }) {
+  const usageCount = (tplId) => machines.filter((m) => m.checklist_template_id === tplId).length;
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+        <h2 style={{ fontSize: 18, margin: 0 }}>Szablony list kontrolnych ({templates.length})</h2>
+        <button className="btn btn-primary" onClick={onAdd}><Plus size={16} /> Dodaj szablon</button>
+      </div>
+      <p className="text-sm text-muted" style={{ marginBottom: 14 }}>
+        Zdefiniuj listę punktów raz dla danego typu maszyny (np. "Drukarka", "Zgrzewarka") i przypisuj ją do wielu maszyn zamiast wpisywać te same punkty za każdym razem.
+      </p>
+      {templates.length === 0 && <p className="text-muted">Brak szablonów. Dodaj pierwszy.</p>}
+      {templates.map((t) => (
+        <div className="row" key={t.id}>
+          <div className="row-main" style={{ cursor: 'default' }}>
+            <div className="row-title">{t.name}</div>
+            <div className="row-sub">{t.items.length} punktów kontrolnych · używany przez {usageCount(t.id)} maszyn</div>
+          </div>
+          <button className="btn btn-subtle" onClick={() => onEdit(t)}><Pencil size={16} /></button>
+          <button className="btn btn-danger" onClick={() => onDelete(t)}><Trash2 size={16} /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TemplateFormModal({ initial, onSave, onClose }) {
+  const [name, setName] = useState(initial?.name || '');
+  const [items, setItems] = useState(initial?.items?.length ? initial.items : ['']);
+
+  const updateItem = (i, value) => setItems((list) => list.map((v, idx) => (idx === i ? value : v)));
+  const addItem = () => setItems((list) => [...list, '']);
+  const removeItem = (i) => setItems((list) => list.filter((_, idx) => idx !== i));
+
+  const submit = () => {
+    if (!name.trim()) return;
+    onSave({ id: initial?.id, name: name.trim(), items });
+  };
+
+  return (
+    <Modal title={initial ? 'Edytuj szablon' : 'Nowy szablon listy kontrolnej'} onClose={onClose}>
+      <label className="field">
+        <span className="field-label">Nazwa szablonu</span>
+        <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="np. Drukarka" autoFocus />
+      </label>
+      <div className="field">
+        <span className="field-label">Punkty kontrolne</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {items.map((item, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8 }}>
+              <input className="input" value={item} onChange={(e) => updateItem(i, e.target.value)} placeholder="np. Poziom oleju" />
+              <button type="button" className="btn btn-danger" onClick={() => removeItem(i)} disabled={items.length === 1}>
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <button type="button" className="btn btn-subtle" style={{ marginTop: 8 }} onClick={addItem}>
+          <Plus size={15} /> Dodaj punkt
+        </button>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button className="btn btn-ghost" onClick={onClose}>Anuluj</button>
+        <button className="btn btn-primary" onClick={submit}>{initial ? 'Zapisz zmiany' : 'Dodaj szablon'}</button>
       </div>
     </Modal>
   );

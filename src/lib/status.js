@@ -61,3 +61,11 @@ export function uid(prefix) {
 export function qrUrl(text, size = 220) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=8&data=${encodeURIComponent(text)}`;
 }
+
+// Własna lista (checklist_items) nadpisuje szablon, jeśli niepusta.
+// W przeciwnym razie używane są punkty z przypisanego szablonu.
+export function resolveChecklist(machine, templates) {
+  if (machine.checklist_items && machine.checklist_items.length > 0) return machine.checklist_items;
+  const tpl = templates?.find((t) => t.id === machine.checklist_template_id);
+  return tpl?.items || [];
+}
