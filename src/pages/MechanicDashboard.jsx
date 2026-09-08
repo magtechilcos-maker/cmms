@@ -5,7 +5,6 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, resolveChecklist } from '../lib/status';
 import InspectionForm from '../components/InspectionForm';
-import PrintDetailsPrompt from '../components/PrintDetailsPrompt';
 import { InspectionReport } from '../components/PrintReports';
 
 export default function MechanicDashboard() {
@@ -14,21 +13,23 @@ export default function MechanicDashboard() {
   const location = useLocation();
   const [machines, setMachines] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [reportSettings, setReportSettings] = useState({ doc_number: '', approval_date: null });
   const [loading, setLoading] = useState(true);
   const [inspecting, setInspecting] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [pendingPrint, setPendingPrint] = useState(null);
   const [printJob, setPrintJob] = useState(null);
 
   const load = useCallback(async () => {
     if (!mechanic) return;
     setLoading(true);
-    const [{ data }, { data: tpl }] = await Promise.all([
+    const [{ data }, { data: tpl }, { data: rs }] = await Promise.all([
       supabase.from('machines').select('*').eq('assigned_mechanic_id', mechanic.id),
       supabase.from('checklist_templates').select('*'),
+      supabase.from('report_settings').select('*').eq('id', 1).maybeSingle(),
     ]);
     setMachines(data || []);
     setTemplates(tpl || []);
+    setReportSettings(rs || { doc_number: '', approval_date: null });
     setLoading(false);
   }, [mechanic]);
 
@@ -57,7 +58,12 @@ export default function MechanicDashboard() {
     const machine = inspecting;
     setInspecting(null);
     await load();
-    setPendingPrint({ machine, inspection: rec });
+    setPrintJob({
+      machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, templates) },
+      inspection: rec,
+      docNumber: reportSettings.doc_number,
+      approvalDate: reportSettings.approval_date,
+    });
   };
 
   if (!mechanic) return null;
@@ -130,23 +136,6 @@ export default function MechanicDashboard() {
           saving={saving}
           onSave={saveInspection}
           onClose={() => setInspecting(null)}
-        />
-      )}
-
-      {pendingPrint && (
-        <PrintDetailsPrompt
-          defaultDocNumber={`${pendingPrint.machine.id}-${pendingPrint.inspection.date.slice(0, 10).replace(/-/g, '')}`}
-          onCancel={() => setPendingPrint(null)}
-          onConfirm={(docNumber, approvalDate) => {
-            const { machine, inspection: rec } = pendingPrint;
-            setPendingPrint(null);
-            setPrintJob({
-              machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, templates) },
-              inspection: rec,
-              docNumber,
-              approvalDate,
-            });
-          }}
         />
       )}
     </div>

@@ -29,6 +29,32 @@ grant select on mechanics_public to anon, authenticated;
 revoke all on mechanics from anon, authenticated;
 
 -- ---------------------------------------------------------
+-- USTAWIENIA RAPORTU (nr dokumentu / data zatwierdzenia)
+-- Jeden wspólny rekord, edytowany z panelu admina — używany
+-- automatycznie w nagłówku każdego wydrukowanego raportu.
+-- ---------------------------------------------------------
+create table if not exists report_settings (
+  id int primary key default 1,
+  doc_number text,
+  approval_date date,
+  updated_at timestamptz default now()
+);
+
+alter table report_settings enable row level security;
+
+drop policy if exists "report_settings_public_read" on report_settings;
+create policy "report_settings_public_read" on report_settings
+  for select using (true);
+
+drop policy if exists "report_settings_public_write" on report_settings;
+create policy "report_settings_public_write" on report_settings
+  for all using (true) with check (true);
+
+insert into report_settings (id, doc_number, approval_date)
+  values (1, null, null)
+  on conflict (id) do nothing;
+
+-- ---------------------------------------------------------
 -- SZABLONY LIST KONTROLNYCH
 -- Pozwalają zdefiniować listę punktów raz (np. dla typu maszyny)
 -- i przypisać ją do wielu maszyn zamiast wpisywać punkty osobno
@@ -192,6 +218,25 @@ end;
 $$;
 
 grant execute on function delete_mechanic(uuid) to anon, authenticated;
+
+-- ---------------------------------------------------------
+-- USTAWIENIA WYDRUKU (nr dokumentu i data zatwierdzenia)
+-- Ustawiane raz w panelu admina, używane automatycznie na każdym wydruku.
+-- ---------------------------------------------------------
+create table if not exists report_settings (
+  id int primary key default 1,
+  doc_number text not null default '',
+  approval_date date,
+  check (id = 1)
+);
+
+alter table report_settings enable row level security;
+
+drop policy if exists "report_settings_public_all" on report_settings;
+create policy "report_settings_public_all" on report_settings
+  for all using (true) with check (true);
+
+insert into report_settings (id) values (1) on conflict (id) do nothing;
 
 -- =========================================================
 -- PIERWSZY ADMINISTRATOR (wykonaj RAZ, ręcznie)

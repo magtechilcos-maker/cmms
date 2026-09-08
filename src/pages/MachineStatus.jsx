@@ -5,7 +5,6 @@ import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, fmtDateTime, resolveChecklist } from '../lib/status';
 import InspectionForm from '../components/InspectionForm';
-import PrintDetailsPrompt from '../components/PrintDetailsPrompt';
 import { InspectionReport, BlankChecklistSheet } from '../components/PrintReports';
 
 export default function MachineStatus() {
@@ -14,19 +13,23 @@ export default function MachineStatus() {
   const navigate = useNavigate();
   const [machine, setMachine] = useState(null);
   const [template, setTemplate] = useState(null);
+  const [reportSettings, setReportSettings] = useState({ doc_number: '', approval_date: null });
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [inspecting, setInspecting] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [pendingPrint, setPendingPrint] = useState(null); // {kind:'inspection'|'checklist', inspection?}
   const [printJob, setPrintJob] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: m } = await supabase.from('machines').select('*').eq('id', machineId).maybeSingle();
+    const [{ data: m }, { data: rs }] = await Promise.all([
+      supabase.from('machines').select('*').eq('id', machineId).maybeSingle(),
+      supabase.from('report_settings').select('*').eq('id', 1).maybeSingle(),
+    ]);
     if (!m) { setNotFound(true); setLoading(false); return; }
     setMachine(m);
+    setReportSettings(rs || { doc_number: '', approval_date: null });
     if (m.checklist_template_id) {
       const { data: tpl } = await supabase.from('checklist_templates').select('*').eq('id', m.checklist_template_id).maybeSingle();
       setTemplate(tpl || null);
@@ -69,7 +72,22 @@ export default function MachineStatus() {
     if (error) { alert('Błąd zapisu: ' + error.message); return; }
     setInspecting(false);
     await load();
-    setPendingPrint({ kind: 'inspection', inspection: rec });
+    setPrintJob({
+      type: 'inspection',
+      machine: { ...machine, last_inspection_date: rec.date, checklist_items: resolveChecklist(machine, template ? [template] : []) },
+      inspection: rec,
+      docNumber: reportSettings.doc_number,
+      approvalDate: reportSettings.approval_date,
+    });
+  };
+
+  const printBlankChecklist = () => {
+    setPrintJob({
+      type: 'checklist',
+      machine: { ...machine, checklist_items: resolveChecklist(machine, template ? [template] : []) },
+      docNumber: reportSettings.doc_number,
+      approvalDate: reportSettings.approval_date,
+    });
   };
 
   if (loading) return <div className="center-screen text-muted">Wczytywanie…</div>;
@@ -122,7 +140,7 @@ export default function MachineStatus() {
           <button className="btn btn-primary" style={{ marginTop: 10 }} onClick={startInspection}>
             <CheckCircle2 size={16} /> Zarejestruj przegląd
           </button>
-          <button className="btn btn-subtle" style={{ marginTop: 10, marginLeft: 8 }} onClick={() => setPendingPrint({ kind: 'checklist' })}>
+          <button className="btn btn-subtle" style={{ marginTop: 10, marginLeft: 8 }} onClick={printBlankChecklist}>
             <Printer size={16} /> Drukuj kartę kontrolną
           </button>
         </div>
@@ -149,28 +167,6 @@ export default function MachineStatus() {
           saving={saving}
           onSave={saveInspection}
           onClose={() => setInspecting(false)}
-        />
-      )}
-
-      {pendingPrint && (
-        <PrintDetailsPrompt
-          defaultDocNumber={pendingPrint.kind === 'inspection' ? `${machine.id}-${pendingPrint.inspection.date.slice(0, 10).replace(/-/g, '')}` : `${machine.id}-KARTA`}
-          onCancel={() => setPendingPrint(null)}
-          onConfirm={(docNumber, approvalDate) => {
-            const effectiveChecklist = resolveChecklist(machine, template ? [template] : []);
-            if (pendingPrint.kind === 'inspection') {
-              setPrintJob({
-                type: 'inspection',
-                machine: { ...machine, last_inspection_date: pendingPrint.inspection.date, checklist_items: effectiveChecklist },
-                inspection: pendingPrint.inspection,
-                docNumber,
-                approvalDate,
-              });
-            } else {
-              setPrintJob({ type: 'checklist', machine: { ...machine, checklist_items: effectiveChecklist }, docNumber, approvalDate });
-            }
-            setPendingPrint(null);
-          }}
         />
       )}
     </div>

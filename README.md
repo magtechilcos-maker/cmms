@@ -133,6 +133,8 @@ Lista ta pojawia się na **dwóch rodzajach wydruku**, zawsze z pustymi kratkami
 
 Obie wersje mają też ramkę **Uwagi** na komentarze w stylu "zaplanowano do wymiany" czy "oczekiwanie na części".
 
+**Nr dokumentu i data zatwierdzenia** widoczne w nagłówku obu wydruków ustawiasz raz w panelu admina, w zakładce **Raporty i etykiety → Dane w nagłówku wydruków**. Od tej pory każdy wydruk (dla każdej maszyny) automatycznie użyje tych samych wartości — nie trzeba niczego wpisywać przy każdym druku. Zmieniasz je tylko wtedy, gdy faktycznie się zmienią (np. nowa wersja dokumentu).
+
 ## Uwagi dot. bezpieczeństwa
 
 To rozwiązanie jest pomyślane jako **wewnętrzne narzędzie dla małego zespołu**, a nie publiczny system z pełnym uwierzytelnianiem. Logowanie mechanika (imię + 4-cyfrowy PIN) jest celowo proste. Warto wiedzieć:

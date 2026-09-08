@@ -4,7 +4,6 @@ import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode, LogOut,
 import { supabase, SITE_URL } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import Modal from '../components/Modal';
-import PrintDetailsPrompt from '../components/PrintDetailsPrompt';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, uid, qrUrl, resolveChecklist } from '../lib/status';
 import { PeriodReport, QrSheet, BlankChecklistSheet } from '../components/PrintReports';
 
@@ -16,13 +15,13 @@ export default function Admin() {
   const [mechanics, setMechanics] = useState([]);
   const [inspections, setInspections] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [reportSettings, setReportSettings] = useState({ doc_number: '', approval_date: null });
   const [loading, setLoading] = useState(true);
 
   const [machineForm, setMachineForm] = useState(null); // {} for new, object for edit, null closed
   const [mechanicForm, setMechanicForm] = useState(null);
   const [templateForm, setTemplateForm] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // {type:'machine'|'mechanic'|'template', item}
-  const [pendingChecklistPrint, setPendingChecklistPrint] = useState(null);
   const [printJob, setPrintJob] = useState(null);
 
   useEffect(() => {
@@ -37,16 +36,18 @@ export default function Admin() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [{ data: m }, { data: mech }, { data: insp }, { data: tpl }] = await Promise.all([
+    const [{ data: m }, { data: mech }, { data: insp }, { data: tpl }, { data: rs }] = await Promise.all([
       supabase.from('machines').select('*').order('name'),
       supabase.from('mechanics_public').select('*').order('name'),
       supabase.from('inspections').select('*'),
       supabase.from('checklist_templates').select('*').order('name'),
+      supabase.from('report_settings').select('*').eq('id', 1).maybeSingle(),
     ]);
     setMachines(m || []);
     setMechanics(mech || []);
     setInspections(insp || []);
     setTemplates(tpl || []);
+    setReportSettings(rs || { doc_number: '', approval_date: null });
     setLoading(false);
   }, []);
 
@@ -62,6 +63,12 @@ export default function Admin() {
       return () => { clearTimeout(t); window.removeEventListener('afterprint', after); };
     }
   }, [printJob]);
+
+  const saveReportSettings = async (doc_number, approval_date) => {
+    const { error } = await supabase.from('report_settings').update({ doc_number, approval_date }).eq('id', 1);
+    if (error) { alert('Błąd zapisu: ' + error.message); return; }
+    setReportSettings({ doc_number, approval_date });
+  };
 
   if (!mechanic || !mechanic.is_admin) return null;
 
@@ -111,7 +118,12 @@ export default function Admin() {
   };
 
   const printChecklistFor = (m) => {
-    setPendingChecklistPrint(m);
+    setPrintJob({
+      type: 'checklist',
+      machine: { ...m, checklist_items: resolveChecklist(m, templates) },
+      docNumber: reportSettings.doc_number,
+      approvalDate: reportSettings.approval_date,
+    });
   };
 
   return (
@@ -169,6 +181,8 @@ export default function Admin() {
             {tab === 'reports' && (
               <ReportsTab
                 machines={machines}
+                reportSettings={reportSettings}
+                onSaveSettings={saveReportSettings}
                 onPrintPeriod={(from, to) => setPrintJob({ type: 'period', from, to })}
                 onPrintQr={(list) => setPrintJob({ type: 'qrsheet', machines: list })}
               />
@@ -200,18 +214,6 @@ export default function Admin() {
           onClose={() => setTemplateForm(null)}
         />
       )}
-      {pendingChecklistPrint && (
-        <PrintDetailsPrompt
-          defaultDocNumber={`${pendingChecklistPrint.id}-KARTA`}
-          onCancel={() => setPendingChecklistPrint(null)}
-          onConfirm={(docNumber, approvalDate) => {
-            const m = pendingChecklistPrint;
-            setPendingChecklistPrint(null);
-            setPrintJob({ type: 'checklist', machine: { ...m, checklist_items: resolveChecklist(m, templates) }, docNumber, approvalDate });
-          }}
-        />
-      )}
-
       {confirmDelete && (
         <Modal
           title={confirmDelete.type === 'machine' ? 'Usuń maszynę' : confirmDelete.type === 'mechanic' ? 'Usuń mechanika' : 'Usuń szablon'}
@@ -551,11 +553,40 @@ function MechanicFormModal({ initial, onSave, onClose }) {
 
 /* ---------------- Reports tab ---------------- */
 
-function ReportsTab({ machines, onPrintPeriod, onPrintQr }) {
+function ReportsTab({ machines, reportSettings, onSaveSettings, onPrintPeriod, onPrintQr }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [docNumber, setDocNumber] = useState(reportSettings.doc_number || '');
+  const [approvalDate, setApprovalDate] = useState(reportSettings.approval_date || '');
+  const [saved, setSaved] = useState(false);
+
+  const submitSettings = () => {
+    onSaveSettings(docNumber, approvalDate || null);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
   return (
     <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))' }}>
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <FileText size={18} color="var(--steel)" />
+          <h3 style={{ fontSize: 16, margin: 0 }}>Dane w nagłówku wydruków</h3>
+        </div>
+        <p className="text-sm text-muted">
+          Numer dokumentu i data zatwierdzenia w nagłówku raportu z przeglądu i karty kontrolnej. Ustawione tu raz, używane automatycznie na każdym wydruku — bez pytania za każdym razem.
+        </p>
+        <label className="field">
+          <span className="field-label">Nr dokumentu</span>
+          <input className="input" value={docNumber} onChange={(e) => setDocNumber(e.target.value)} placeholder="np. IL-COS-001" />
+        </label>
+        <label className="field">
+          <span className="field-label">Data zatwierdzenia</span>
+          <input type="date" className="input" value={approvalDate || ''} onChange={(e) => setApprovalDate(e.target.value)} />
+        </label>
+        <button className="btn btn-primary" onClick={submitSettings}>{saved ? 'Zapisano ✓' : 'Zapisz'}</button>
+      </div>
+
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <FileText size={18} color="var(--steel)" />
