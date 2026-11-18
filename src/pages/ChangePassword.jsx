@@ -4,7 +4,7 @@ import { KeyRound, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 
-const MIN_LENGTH = 8;
+const MIN_LENGTH = 4;
 
 export default function ChangePassword() {
   const { mechanic, login, logout } = useAuth();
