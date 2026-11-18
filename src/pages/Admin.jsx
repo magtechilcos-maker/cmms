@@ -96,7 +96,7 @@ export default function Admin() {
     const { error } = await supabase.rpc('upsert_mechanic', { p_name: name, p_password: password || null, p_id: id || null, p_is_admin: is_admin });
     if (error) {
       const msg = error.message || '';
-      if (msg.includes('PASSWORD_TOO_SHORT')) alert('Hasło musi mieć co najmniej 8 znaków.');
+      if (msg.includes('PASSWORD_TOO_SHORT')) alert('Hasło musi mieć co najmniej 4 znaki.');
       else if (msg.includes('PASSWORD_REQUIRED')) alert('Podaj hasło tymczasowe dla nowego mechanika.');
       else alert('Błąd zapisu: ' + msg);
       return;
@@ -547,8 +547,8 @@ function MechanicFormModal({ initial, onSave, onClose }) {
 
   const submit = () => {
     if (!name.trim()) return;
-    if (!initial && password.length < 8) { alert('Podaj hasło tymczasowe (min. 8 znaków) — możesz użyć przycisku „Generuj".'); return; }
-    if (password && password.length < 8) { alert('Hasło musi mieć co najmniej 8 znaków.'); return; }
+    if (!initial && password.length < 4) { alert('Podaj hasło tymczasowe (min. 4 znaki) — możesz użyć przycisku „Generuj".'); return; }
+    if (password && password.length < 4) { alert('Hasło musi mieć co najmniej 4 znaki.'); return; }
     onSave({ id: initial?.id, name: name.trim(), password: password || null, is_admin: isAdmin });
   };
 
@@ -559,7 +559,7 @@ function MechanicFormModal({ initial, onSave, onClose }) {
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="np. Jan Kowalski" autoFocus />
       </label>
       <div className="field">
-        <span className="field-label">{initial ? 'Nowe hasło tymczasowe (zostaw puste, aby nie zmieniać)' : 'Hasło tymczasowe (min. 8 znaków)'}</span>
+        <span className="field-label">{initial ? 'Nowe hasło tymczasowe (zostaw puste, aby nie zmieniać)' : 'Hasło tymczasowe (min. 4 znaki)'}</span>
         <div style={{ display: 'flex', gap: 8 }}>
           <input className="input" type="text" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} style={{ fontFamily: 'monospace' }} />
           <button type="button" className="btn btn-subtle" onClick={() => setPassword(generatePassword())}>Generuj</button>
