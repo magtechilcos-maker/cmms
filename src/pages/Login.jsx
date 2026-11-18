@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Wrench, LogIn, ShieldCheck, ArrowLeft } from 'lucide-react';
+import { Wrench, LogIn, ShieldCheck, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 
@@ -8,7 +8,8 @@ export default function Login() {
   const [mechanics, setMechanics] = useState([]);
   const [adminMode, setAdminMode] = useState(false);
   const [name, setName] = useState('');
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -29,22 +30,30 @@ export default function Login() {
   const toggleMode = () => {
     setAdminMode((v) => !v);
     setName('');
-    setPin('');
+    setPassword('');
     setError('');
   };
 
   const submit = async (e) => {
     e.preventDefault();
     setError('');
-    if (!name || pin.length < 4) {
-      setError('Wybierz nazwisko i podaj 4-cyfrowy PIN.');
+    if (!name || !password) {
+      setError('Wybierz nazwisko i wpisz hasło.');
       return;
     }
     setLoading(true);
-    const { data, error: err } = await supabase.rpc('verify_mechanic_pin', { p_name: name, p_pin: pin });
+    const { data, error: err } = await supabase.rpc('verify_mechanic_password', { p_name: name, p_password: password });
     setLoading(false);
-    if (err || !data || data.length === 0) {
-      setError('Nieprawidłowy PIN. Spróbuj ponownie.');
+    if (err) {
+      setError(
+        err.message?.includes('ACCOUNT_LOCKED')
+          ? 'Konto zostało tymczasowo zablokowane po zbyt wielu błędnych próbach. Spróbuj ponownie za 10 minut.'
+          : 'Nie udało się zalogować. Sprawdź połączenie z internetem i spróbuj ponownie.'
+      );
+      return;
+    }
+    if (!data || data.length === 0) {
+      setError('Nieprawidłowe hasło.');
       return;
     }
     if (adminMode && !data[0].is_admin) {
@@ -52,17 +61,19 @@ export default function Login() {
       return;
     }
     login(data[0]);
-    navigate(returnTo, { replace: true });
+    if (data[0].must_change_password) {
+      navigate('/change-password', { replace: true, state: { returnTo } });
+    } else {
+      navigate(returnTo, { replace: true });
+    }
   };
 
   return (
     <div className="center-screen">
       <div className="card" style={{ width: '100%', maxWidth: 360 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Wrench size={22} color="var(--steel)" />
-            <h1 style={{ fontSize: 18, margin: 0 }}>System przeglądów prewencyjnych dla IL Cosmetics Polska</h1>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+          <Wrench size={22} color="var(--steel)" />
+          <h1 style={{ fontSize: 18, margin: 0 }}>System przeglądów prewencyjnych dla IL Cosmetics Polska</h1>
         </div>
 
         <button
@@ -89,16 +100,25 @@ export default function Login() {
             </select>
           </label>
           <label className="field">
-            <span className="field-label">PIN (4 cyfry)</span>
-            <input
-              className="input"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
-              placeholder="••••"
-            />
+            <span className="field-label">Hasło</span>
+            <div style={{ position: 'relative' }}>
+              <input
+                className="input"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                style={{ paddingRight: 44 }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                title={showPassword ? 'Ukryj hasło' : 'Pokaż hasło'}
+                style={{ position: 'absolute', right: 8, top: 8, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--ink-soft)' }}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </label>
           {error && <p className="text-sm" style={{ color: 'var(--over)' }}>{error}</p>}
           <button className="btn btn-primary btn-block" disabled={loading}>

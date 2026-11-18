@@ -62,6 +62,10 @@ export default function MachineStatus() {
       navigate('/login', { state: { returnTo: `/m/${machineId}` } });
       return;
     }
+    if (mechanic.must_change_password) {
+      navigate('/change-password', { state: { returnTo: `/m/${machineId}` } });
+      return;
+    }
     setInspecting(true);
   };
 

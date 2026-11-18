@@ -2,22 +2,24 @@
 -- IMPORT DANYCH ZE STAREGO SYSTEMU (system_serwisowy.db)
 -- Wygenerowano automatycznie. Uruchom RAZ, PO schema.sql.
 -- Bezpieczny do ponownego uruchomienia — pomija duplikaty po nazwie.
+-- UWAGA: konta pracowników powstają z losowym, nieznanym hasłem — przed pierwszym
+-- logowaniem ustaw każdemu hasło tymczasowe w panelu admina (Mechanicy -> Edytuj -> Generuj).
 -- =========================================================
 
--- 12 pracowników -> mechanicy (PIN = 1000 + stare ID, patrz README)
-insert into mechanics (name, pin_hash, is_admin) values
-  ('Białorucki Damian', crypt('1001', gen_salt('bf')), false),
-  ('Jakubowski Marcin', crypt('1002', gen_salt('bf')), false),
-  ('Konopa Jan', crypt('1003', gen_salt('bf')), false),
-  ('Kurzęcki Piotr', crypt('1004', gen_salt('bf')), false),
-  ('Pikus Kamil', crypt('1005', gen_salt('bf')), false),
-  ('Pikus Mateusz', crypt('1006', gen_salt('bf')), false),
-  ('Potyrała Bartosz', crypt('1007', gen_salt('bf')), false),
-  ('Rębecki Kamil', crypt('1008', gen_salt('bf')), false),
-  ('Różycki Adam', crypt('1009', gen_salt('bf')), false),
-  ('Stefański Mariusz', crypt('1010', gen_salt('bf')), false),
-  ('Tomaszewski Piotr', crypt('1011', gen_salt('bf')), false),
-  ('Wodzyński Witold', crypt('1012', gen_salt('bf')), false)
+-- 12 pracowników -> mechanicy (losowe hasło, wymagana zmiana przy pierwszym logowaniu)
+insert into mechanics (name, password_hash, is_admin, must_change_password) values
+  ('Białorucki Damian', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Jakubowski Marcin', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Konopa Jan', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Kurzęcki Piotr', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Pikus Kamil', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Pikus Mateusz', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Potyrała Bartosz', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Rębecki Kamil', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Różycki Adam', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Stefański Mariusz', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Tomaszewski Piotr', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true),
+  ('Wodzyński Witold', crypt(gen_random_uuid()::text, gen_salt('bf', 10)), false, true)
 on conflict (name) do nothing;
 
 -- 12 szablonów list kontrolnych (pogrupowane wg identycznej listy punktów)

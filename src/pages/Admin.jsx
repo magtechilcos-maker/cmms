@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode, LogOut, ShieldCheck, ListChecks } from 'lucide-react';
+import { Plus, Pencil, Trash2, Printer, Wrench, Users, FileText, QrCode, LogOut, ShieldCheck, ListChecks, KeyRound } from 'lucide-react';
 import { supabase, SITE_URL } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import Modal from '../components/Modal';
@@ -29,6 +29,10 @@ export default function Admin() {
       navigate('/login', { state: { returnTo: '/admin' } });
       return;
     }
+    if (mechanic.must_change_password) {
+      navigate('/change-password', { replace: true, state: { returnTo: '/admin' } });
+      return;
+    }
     if (!mechanic.is_admin) {
       navigate('/dashboard', { replace: true, state: { deniedAdmin: true } });
     }
@@ -52,7 +56,7 @@ export default function Admin() {
   }, []);
 
   useEffect(() => {
-    if (mechanic?.is_admin) load();
+    if (mechanic?.is_admin && !mechanic.must_change_password) load();
   }, [mechanic, load]);
 
   useEffect(() => {
@@ -70,7 +74,7 @@ export default function Admin() {
     setReportSettings({ doc_number, approval_date });
   };
 
-  if (!mechanic || !mechanic.is_admin) return null;
+  if (!mechanic || !mechanic.is_admin || mechanic.must_change_password) return null;
 
   const saveMachine = async (m) => {
     const isNew = !machines.some((x) => x.id === m.id);
@@ -88,9 +92,15 @@ export default function Admin() {
     load();
   };
 
-  const saveMechanic = async ({ id, name, pin, is_admin }) => {
-    const { error } = await supabase.rpc('upsert_mechanic', { p_name: name, p_pin: pin || null, p_id: id || null, p_is_admin: is_admin });
-    if (error) { alert('Błąd zapisu: ' + error.message); return; }
+  const saveMechanic = async ({ id, name, password, is_admin }) => {
+    const { error } = await supabase.rpc('upsert_mechanic', { p_name: name, p_password: password || null, p_id: id || null, p_is_admin: is_admin });
+    if (error) {
+      const msg = error.message || '';
+      if (msg.includes('PASSWORD_TOO_SHORT')) alert('Hasło musi mieć co najmniej 8 znaków.');
+      else if (msg.includes('PASSWORD_REQUIRED')) alert('Podaj hasło tymczasowe dla nowego mechanika.');
+      else alert('Błąd zapisu: ' + msg);
+      return;
+    }
     setMechanicForm(null);
     load();
   };
@@ -134,9 +144,14 @@ export default function Admin() {
 
       <div className="topbar">
         <div className="brand"><Wrench size={20} /> Panel administratora</div>
-        <button className="btn btn-ghost" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => { logout(); navigate('/login'); }}>
-          <LogOut size={16} /> {mechanic.name}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" title="Zmień hasło" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => navigate('/change-password', { state: { returnTo: '/admin' } })}>
+            <KeyRound size={16} />
+          </button>
+          <button className="btn btn-ghost" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => { logout(); navigate('/login'); }}>
+            <LogOut size={16} /> {mechanic.name}
+          </button>
+        </div>
       </div>
 
       <div className="container-wide">
@@ -517,16 +532,24 @@ function MechanicsTab({ mechanics, machines, onAdd, onEdit, onDelete }) {
   );
 }
 
+// Losowe hasło tymczasowe bez łatwo mylonych znaków (0/O, 1/l/I)
+function generatePassword(length = 12) {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  const bytes = new Uint32Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+}
+
 function MechanicFormModal({ initial, onSave, onClose }) {
   const [name, setName] = useState(initial?.name || '');
-  const [pin, setPin] = useState('');
+  const [password, setPassword] = useState('');
   const [isAdmin, setIsAdmin] = useState(initial?.is_admin || false);
 
   const submit = () => {
     if (!name.trim()) return;
-    if (!initial && pin.length !== 4) { alert('Podaj 4-cyfrowy PIN.'); return; }
-    if (pin && pin.length !== 4) { alert('PIN musi mieć 4 cyfry.'); return; }
-    onSave({ id: initial?.id, name: name.trim(), pin: pin || null, is_admin: isAdmin });
+    if (!initial && password.length < 8) { alert('Podaj hasło tymczasowe (min. 8 znaków) — możesz użyć przycisku „Generuj".'); return; }
+    if (password && password.length < 8) { alert('Hasło musi mieć co najmniej 8 znaków.'); return; }
+    onSave({ id: initial?.id, name: name.trim(), password: password || null, is_admin: isAdmin });
   };
 
   return (
@@ -535,10 +558,16 @@ function MechanicFormModal({ initial, onSave, onClose }) {
         <span className="field-label">Imię i nazwisko</span>
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="np. Jan Kowalski" autoFocus />
       </label>
-      <label className="field">
-        <span className="field-label">{initial ? 'Nowy PIN (zostaw puste, aby nie zmieniać)' : 'PIN (4 cyfry)'}</span>
-        <input className="input" inputMode="numeric" maxLength={4} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" />
-      </label>
+      <div className="field">
+        <span className="field-label">{initial ? 'Nowe hasło tymczasowe (zostaw puste, aby nie zmieniać)' : 'Hasło tymczasowe (min. 8 znaków)'}</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input className="input" type="text" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} style={{ fontFamily: 'monospace' }} />
+          <button type="button" className="btn btn-subtle" onClick={() => setPassword(generatePassword())}>Generuj</button>
+        </div>
+        <p className="text-sm text-muted" style={{ marginTop: 6, marginBottom: 0 }}>
+          Przekaż to hasło pracownikowi przed zapisaniem — później nie da się go odczytać. Przy pierwszym logowaniu system poprosi go o ustawienie własnego hasła, którego Ty już nie poznasz.
+        </p>
+      </div>
       <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
         <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} style={{ width: 16, height: 16 }} />
         <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>Uprawnienia administratora (dostęp do panelu /admin)</span>

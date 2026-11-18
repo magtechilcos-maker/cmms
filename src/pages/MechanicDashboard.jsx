@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, CheckCircle2, ListChecks } from 'lucide-react';
+import { LogOut, CheckCircle2, ListChecks, KeyRound } from 'lucide-react';
 import { supabase } from '../supabaseClient';
 import { useAuth } from '../AuthContext';
 import { computeStatus, STATUS_META, INTERVAL_LABELS, fmtDate, resolveChecklist } from '../lib/status';
@@ -36,6 +36,10 @@ export default function MechanicDashboard() {
   useEffect(() => {
     if (!mechanic) {
       navigate('/login', { state: { returnTo: '/dashboard' } });
+      return;
+    }
+    if (mechanic.must_change_password) {
+      navigate('/change-password', { replace: true, state: { returnTo: '/dashboard' } });
       return;
     }
     load();
@@ -81,9 +85,14 @@ export default function MechanicDashboard() {
 
       <div className="topbar">
         <div className="brand"><ListChecks size={20} /> Moje zadania</div>
-        <button className="btn btn-ghost" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => { logout(); navigate('/login'); }}>
-          <LogOut size={16} /> {mechanic.name}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-ghost" title="Zmień hasło" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => navigate('/change-password', { state: { returnTo: '/dashboard' } })}>
+            <KeyRound size={16} />
+          </button>
+          <button className="btn btn-ghost" style={{ background: 'rgba(255,255,255,.1)', color: '#fff', border: 'none' }} onClick={() => { logout(); navigate('/login'); }}>
+            <LogOut size={16} /> {mechanic.name}
+          </button>
+        </div>
       </div>
 
       <div className="container">

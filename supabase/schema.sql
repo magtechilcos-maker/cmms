@@ -1,5 +1,5 @@
 -- =========================================================
--- CMMS Przeglądy — schemat bazy danych dla Supabase
+-- System przeglądów prewencyjnych dla IL Cosmetics Polska — schemat bazy (Supabase)
 -- Wklej całość do Supabase → SQL Editor → Run
 -- =========================================================
 
@@ -11,21 +11,45 @@ create extension if not exists pgcrypto;
 create table if not exists mechanics (
   id uuid primary key default gen_random_uuid(),
   name text unique not null,
-  pin_hash text not null,
+  password_hash text not null,
   is_admin boolean not null default false,
+  must_change_password boolean not null default false,
   created_at timestamptz default now()
 );
+
+-- Migracja ze starej wersji (PIN -> hasło): zmiana nazwy kolumny pin_hash
+do $$
+begin
+  if exists (select 1 from pg_attribute
+             where attrelid = 'public.mechanics'::regclass
+               and attname = 'pin_hash' and not attisdropped) then
+    alter table mechanics rename column pin_hash to password_hash;
+  end if;
+end $$;
 
 alter table mechanics enable row level security;
 alter table mechanics add column if not exists is_admin boolean not null default false;
 
--- Widok bez hasha PIN-u — bezpieczny do pokazania na liście logowania
+-- Migracja: kolumna must_change_password. Przy pierwszym dodaniu wszystkie
+-- istniejące konta (ze starymi 4-cyfrowymi PIN-ami) dostają obowiązek ustawienia
+-- własnego hasła przy następnym logowaniu. Przy kolejnych uruchomieniach nic się nie dzieje.
+do $$
+begin
+  if not exists (select 1 from pg_attribute
+                 where attrelid = 'public.mechanics'::regclass
+                   and attname = 'must_change_password' and not attisdropped) then
+    alter table mechanics add column must_change_password boolean not null default false;
+    update mechanics set must_change_password = true;
+  end if;
+end $$;
+
+-- Widok bez hasha hasła — bezpieczny do pokazania na liście logowania
 create or replace view mechanics_public as
   select id, name, is_admin from mechanics;
 
 grant select on mechanics_public to anon, authenticated;
 
--- Nikt nie czyta bezpośrednio tabeli mechanics z frontendu (PIN hash musi być ukryty)
+-- Nikt nie czyta bezpośrednio tabeli mechanics z frontendu (hash hasła musi być ukryty)
 revoke all on mechanics from anon, authenticated;
 
 -- ---------------------------------------------------------
@@ -158,30 +182,121 @@ create trigger trg_set_last_inspection_date
   for each row execute function set_last_inspection_date();
 
 -- ---------------------------------------------------------
--- LOGOWANIE MECHANIKA (imię + PIN) — bez ujawniania hashy
--- Zwraca też is_admin, żeby aplikacja wiedziała, czy wpuścić do /admin
+-- LOGOWANIE (imię + hasło) — bez ujawniania hashy
+-- Ochrona przed zgadywaniem: po 5 błędnych próbach konto jest blokowane na 10 minut.
 -- ---------------------------------------------------------
-drop function if exists verify_mechanic_pin(text, text);
-create or replace function verify_mechanic_pin(p_name text, p_pin text)
-returns table(id uuid, name text, is_admin boolean)
+create table if not exists login_attempts (
+  name text primary key,
+  failed_count int not null default 0,
+  locked_until timestamptz
+);
+
+alter table login_attempts enable row level security;
+revoke all on login_attempts from anon, authenticated;
+
+-- Funkcja wewnętrzna (niedostępna z frontendu): sprawdza hasło z licznikiem prób.
+-- Zwraca id mechanika albo null; przy zablokowanym koncie zgłasza błąd ACCOUNT_LOCKED.
+create or replace function _check_login(p_name text, p_password text)
+returns uuid
 language plpgsql
 security definer
 as $$
+declare
+  v_id uuid;
+  v_hash text;
+  v_locked timestamptz;
+  v_count int;
 begin
-  return query
-    select m.id, m.name, m.is_admin
-    from mechanics m
-    where m.name = p_name
-      and m.pin_hash = crypt(p_pin, m.pin_hash);
+  select la.locked_until into v_locked from login_attempts la where la.name = p_name;
+  if v_locked is not null and v_locked > now() then
+    raise exception 'ACCOUNT_LOCKED';
+  end if;
+
+  select m.id, m.password_hash into v_id, v_hash from mechanics m where m.name = p_name;
+
+  if v_id is not null and p_password is not null and v_hash = crypt(p_password, v_hash) then
+    delete from login_attempts where login_attempts.name = p_name;
+    return v_id;
+  end if;
+
+  if v_id is not null then
+    insert into login_attempts as la (name, failed_count, locked_until)
+      values (p_name, 1, null)
+    on conflict (name) do update set
+      failed_count = case when la.locked_until is not null and la.locked_until <= now()
+                          then 1 else la.failed_count + 1 end,
+      locked_until = null
+    returning la.failed_count into v_count;
+
+    if v_count >= 5 then
+      update login_attempts set locked_until = now() + interval '10 minutes'
+        where login_attempts.name = p_name;
+    end if;
+  end if;
+
+  return null;
 end;
 $$;
 
-grant execute on function verify_mechanic_pin(text, text) to anon, authenticated;
+revoke all on function _check_login(text, text) from public, anon, authenticated;
 
--- Tworzenie / edycja mechanika z panelu admina (haszuje PIN po stronie serwera)
--- p_is_admin: null = nie zmieniaj przy edycji (przy nowym mechaniku traktowane jako false)
-drop function if exists upsert_mechanic(text, text, uuid);
-create or replace function upsert_mechanic(p_name text, p_pin text, p_id uuid default null, p_is_admin boolean default null)
+drop function if exists verify_mechanic_pin(text, text);
+drop function if exists verify_mechanic_password(text, text);
+create or replace function verify_mechanic_password(p_name text, p_password text)
+returns table(id uuid, name text, is_admin boolean, must_change_password boolean)
+language plpgsql
+security definer
+as $$
+declare
+  v_id uuid;
+begin
+  v_id := _check_login(p_name, p_password);
+  if v_id is null then
+    return;
+  end if;
+  return query
+    select m.id, m.name, m.is_admin, m.must_change_password
+    from mechanics m
+    where m.id = v_id;
+end;
+$$;
+
+grant execute on function verify_mechanic_password(text, text) to anon, authenticated;
+
+-- Zmiana własnego hasła przez zalogowanego użytkownika (wymaga podania obecnego hasła)
+create or replace function change_password(p_name text, p_old text, p_new text)
+returns boolean
+language plpgsql
+security definer
+as $$
+declare
+  v_id uuid;
+begin
+  if p_new is null or length(p_new) < 8 then
+    raise exception 'PASSWORD_TOO_SHORT';
+  end if;
+  if p_new = p_old then
+    raise exception 'PASSWORD_UNCHANGED';
+  end if;
+  v_id := _check_login(p_name, p_old);
+  if v_id is null then
+    return false;
+  end if;
+  update mechanics
+    set password_hash = crypt(p_new, gen_salt('bf', 10)),
+        must_change_password = false
+    where mechanics.id = v_id;
+  return true;
+end;
+$$;
+
+grant execute on function change_password(text, text, text) to anon, authenticated;
+
+-- Tworzenie / edycja mechanika z panelu admina (haszuje hasło po stronie serwera).
+-- Hasło ustawione przez admina jest tymczasowe: pracownik musi je zmienić przy pierwszym logowaniu.
+-- p_password przy edycji: puste = nie zmieniaj. p_is_admin: null = nie zmieniaj.
+drop function if exists upsert_mechanic(text, text, uuid, boolean);
+create or replace function upsert_mechanic(p_name text, p_password text, p_id uuid default null, p_is_admin boolean default null)
 returns table(id uuid, name text, is_admin boolean)
 language plpgsql
 security definer
@@ -189,16 +304,26 @@ as $$
 declare
   v_id uuid;
 begin
+  if p_password is not null and p_password <> '' and length(p_password) < 8 then
+    raise exception 'PASSWORD_TOO_SHORT';
+  end if;
+
   if p_id is not null then
     update mechanics set
       name = p_name,
-      pin_hash = case when p_pin is not null and p_pin <> '' then crypt(p_pin, gen_salt('bf')) else pin_hash end,
+      password_hash = case when p_password is not null and p_password <> ''
+                           then crypt(p_password, gen_salt('bf', 10)) else password_hash end,
+      must_change_password = case when p_password is not null and p_password <> ''
+                                  then true else must_change_password end,
       is_admin = coalesce(p_is_admin, mechanics.is_admin)
       where mechanics.id = p_id
       returning mechanics.id into v_id;
   else
-    insert into mechanics(name, pin_hash, is_admin)
-      values (p_name, crypt(p_pin, gen_salt('bf')), coalesce(p_is_admin, false))
+    if p_password is null or p_password = '' then
+      raise exception 'PASSWORD_REQUIRED';
+    end if;
+    insert into mechanics(name, password_hash, is_admin, must_change_password)
+      values (p_name, crypt(p_password, gen_salt('bf', 10)), coalesce(p_is_admin, false), true)
       returning mechanics.id into v_id;
   end if;
   return query select mechanics.id, mechanics.name, mechanics.is_admin from mechanics where mechanics.id = v_id;
@@ -239,28 +364,32 @@ create policy "report_settings_public_all" on report_settings
 insert into report_settings (id) values (1) on conflict (id) do nothing;
 
 -- =========================================================
--- PIERWSZY ADMINISTRATOR (wykonaj RAZ, ręcznie)
--- Dopóki nikt nie ma is_admin = true, nikt nie wejdzie do /admin, żeby
--- dodać pierwszego administratora przez interfejs — trzeba to zrobić
--- raz, bezpośrednio w SQL Editor. Podmień imię i PIN poniżej, uruchom,
--- a potem zaloguj się w aplikacji tymi danymi pod /login.
--- Bezpieczne do wielokrotnego uruchomienia — jeśli taki mechanik już
--- istnieje, po prostu nic się nie stanie zamiast błędu.
+-- PIERWSZY ADMINISTRATOR (tylko dla świeżej instalacji)
+-- Konto startowe powstaje WYŁĄCZNIE wtedy, gdy w bazie nie ma jeszcze żadnego
+-- administratora — przy ponownym uruchomieniu schematu nic nie jest dodawane
+-- (dzięki temu nie powstają przypadkowe konta ze znanym hasłem).
+-- Przed uruchomieniem podmień imię i hasło poniżej (min. 8 znaków).
+-- Przy pierwszym logowaniu system poprosi o ustawienie własnego hasła.
 -- =========================================================
 do $$
 begin
-  perform upsert_mechanic('Jan Kowalski', '1234', null, true);
-exception when unique_violation then
-  raise notice 'Mechanik o tej nazwie już istnieje — pomijam tworzenie.';
+  if not exists (select 1 from mechanics where is_admin) then
+    perform upsert_mechanic('Jan Kowalski', 'ZmienMnie-123', null, true);
+  end if;
 end $$;
 
 -- =========================================================
 -- UWAGA DOT. BEZPIECZEŃSTWA
 -- Ten system nie używa pełnego uwierzytelniania Supabase Auth —
--- logowanie mechanika (imię + PIN) jest uproszczone i wygodne dla
--- małego zespołu, ale klucz "anon" używany przez frontend ma prawo
--- zapisu do tabeli machines/inspections. To wystarcza dla wewnętrznego
--- narzędzia w zaufanej sieci firmowej. Jeśli w przyszłości potrzebujesz
--- twardszej ochrony (np. panel admina dostępny publicznie w internecie),
--- warto dodać Supabase Auth dla roli "kierownik/admin".
+-- logowanie (imię + hasło) jest uproszczone i wygodne dla małego zespołu.
+-- Hasła są haszowane (bcrypt) po stronie bazy, a po 5 błędnych próbach
+-- konto jest blokowane na 10 minut. Klucz "anon" używany przez frontend
+-- ma jednak prawo zapisu do tabel machines/inspections i może wywoływać
+-- funkcje zarządzania kontami, więc to rozwiązanie jest przeznaczone dla
+-- wewnętrznego narzędzia w zaufanej sieci firmowej. Pracownicy nie powinni
+-- używać tu haseł, których używają w innych systemach. Dla twardszej ochrony
+-- warto w przyszłości przejść na Supabase Auth.
 -- =========================================================
+
+-- Odśwież pamięć podręczną API Supabase po zmianie funkcji
+notify pgrst, 'reload schema';
